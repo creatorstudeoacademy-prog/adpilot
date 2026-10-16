@@ -1,0 +1,147 @@
+{% comment %}
+  PixelPro — Multi Pixel Manager app embed block.
+  Installs Meta, TikTok, Google and Snapchat pixels on the storefront and
+  fires standard ecommerce events (PageView, ViewContent, AddToCart,
+  InitiateCheckout, Purchase).
+
+  Enable in: Theme editor > Theme settings > App embeds > PixelPro Tracking.
+  Configure in: Shopify admin > Apps > PixelPro.
+
+  Configuration is stored in the shop metafield "pixelpro.config"
+  (written by the app admin). Only pixels with an ID configured are injected.
+{% endcomment %}
+
+{%- liquid
+  assign cfg = shop.metafields.pixelpro.config.value
+
+  assign tracking_enabled = cfg.enabled
+  if tracking_enabled == nil
+    assign tracking_enabled = true
+  endif
+
+  assign meta_id = cfg['metaPixelId'] | default: ''
+  assign tiktok_id = cfg['tiktokPixelId'] | default: ''
+  assign google_id = cfg['googleTagId'] | default: ''
+  assign snap_id = cfg['snapchatPixelId'] | default: ''
+
+  assign has_pixels = false
+  if meta_id != '' or tiktok_id != '' or google_id != '' or snap_id != ''
+    assign has_pixels = true
+  endif
+
+  # Page context for the event layer
+  assign template_name = template.name | default: ''
+  assign is_product = false
+  assign is_cart = false
+  assign is_thankyou = false
+  if template_name == 'product'
+    assign is_product = true
+  endif
+  if template_name == 'cart'
+    assign is_cart = true
+  endif
+  if template_name contains 'customers/order' or template_name == 'order'
+    assign is_thankyou = true
+  endif
+-%}
+
+{%- if tracking_enabled and has_pixels -%}
+
+  {%- if meta_id != '' -%}
+    <!-- PixelPro: Meta Pixel -->
+    <script>
+      !function(f,b,e,v,n,t,s)
+      {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+      n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+      if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+      n.queue=[];t=b.createElement(e);t.async=!0;
+      t.src=v;s=b.getElementsByTagName(e)[0];
+      s.parentNode.insertBefore(t,s)}(window, document,'script',
+      'https://connect.facebook.net/en_US/fbevents.js');
+      fbq('init', {{ meta_id | json }});
+    </script>
+  {%- endif -%}
+
+  {%- if tiktok_id != '' -%}
+    <!-- PixelPro: TikTok Pixel -->
+    <script>
+      !function (w, d, t) {
+        w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];
+        ttq.methods=["page","track","identify","instances","debug","on","off","once","ready","alias","group","enableCookie","disableCookie","holdConsent","revokeConsent","grantConsent"];
+        ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}};
+        for(var i=0;i<ttq.methods.length;i++)ttq.setAndDefer(ttq,ttq.methods[i]);
+        ttq.instance=function(t){for(var e=ttq._i[t]||[],n=0;n<ttq.methods.length;n++)ttq.setAndDefer(e,ttq.methods[n]);return e};
+        ttq.load=function(e,n){var r="https://analytics.tiktok.com/i18n/pixel/events.js",o=n&&n.partner;ttq._i=ttq._i||{};ttq._i[e]=[];ttq._i[e]._u=r;ttq._t=ttq._t||{};ttq._t[e]=+new Date;ttq._o=ttq._o||{};ttq._o[e]=n||{};n=document.createElement("script");n.type="text/javascript";n.async=!0;n.src=r+"?sdkid="+e+"&lib="+t;e=document.getElementsByTagName("script")[0];e.parentNode.insertBefore(n,e)};
+        ttq.load({{ tiktok_id | json }});
+      }(window, document, 'ttq');
+    </script>
+  {%- endif -%}
+
+  {%- if google_id != '' -%}
+    <!-- PixelPro: Google Tag -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id={{ google_id | escape }}"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', {{ google_id | json }});
+    </script>
+  {%- endif -%}
+
+  {%- if snap_id != '' -%}
+    <!-- PixelPro: Snapchat Pixel -->
+    <script>
+      (function(e,t,n){if(e.snaptr)return;var a=e.snaptr=function()
+      {a.handleRequest?a.handleRequest.apply(a,arguments):a.queue.push(arguments)};
+      a.queue=[];var s='script';var r=t.createElement(s);r.async=!0;
+      r.src=n;var u=t.getElementsByTagName(s)[0];
+      u.parentNode.insertBefore(r,u);})(window,document,
+      'https://sc-static.net/scevent.min.js');
+      snaptr('init', {{ snap_id | json }});
+    </script>
+  {%- endif -%}
+
+  <script type="application/json" data-pixelpro-config>
+    {
+      "meta": {{ meta_id | json }},
+      "tiktok": {{ tiktok_id | json }},
+      "google": {{ google_id | json }},
+      "snapchat": {{ snap_id | json }},
+      "currency": {{ shop.currency | json }},
+      "page": {{ template_name | json }},
+      "isProduct": {{ is_product | json }},
+      "isCart": {{ is_cart | json }},
+      "isThankyou": {{ is_thankyou | json }},
+      "product": {% if is_product %}{
+        "id": {{ product.id | json }},
+        "title": {{ product.title | json }},
+        "price": {{ product.price | divided_by: 100.0 | json }},
+        "variantId": {{ product.selected_or_first_available_variant.id | json }}
+      }{% else %}null{% endif %},
+      "cartTotal": {{ cart.total_price | divided_by: 100.0 | json }},
+      "cartCount": {{ cart.item_count | json }},
+      "order": {% if is_thankyou and checkout %}{
+        "id": {{ checkout.order_id | json }},
+        "total": {{ checkout.total_price | divided_by: 100.0 | json }},
+        "items": [
+          {%- for item in checkout.line_items -%}
+            {
+              "id": {{ item.product_id | json }},
+              "title": {{ item.title | json }},
+              "price": {{ item.price | divided_by: 100.0 | json }},
+              "quantity": {{ item.quantity | json }}
+            }{% unless forloop.last %},{% endunless %}
+          {%- endfor -%}
+        ]
+      }{% else %}null{% endif %}
+    }
+  </script>
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "PixelPro Tracking",
+  "target": "body",
+  "javascript": "pixelpro.js"
+}
+{% endschema %}

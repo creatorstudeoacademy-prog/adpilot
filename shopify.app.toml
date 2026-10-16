@@ -1,0 +1,49 @@
+# Learn more about configuring your app:
+# https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = ""
+name = "PixelPro - Multi Pixel Manager"
+handle = "pixelpro-manager"
+application_url = ""
+embedded = true
+
+[access_scopes]
+# This app stores its configuration in shop metafields (custom namespace)
+# and bills through the Billing API. No additional access scopes are required.
+scopes = ""
+
+[auth]
+redirect_urls = []
+
+[webhooks]
+api_version = "2026-01"
+
+  # Handled by: app/routes/webhooks.app.uninstalled.tsx
+  [[webhooks.subscriptions]]
+  topics = ["app/uninstalled"]
+  uri = "/webhooks/app/uninstalled"
+
+  # Handled by: app/routes/webhooks.app.scopes_update.tsx
+  [[webhooks.subscriptions]]
+  topics = ["app/scopes_update"]
+  uri = "/webhooks/app/scopes_update"
+
+  # Mandatory GDPR compliance webhooks for public apps.
+  # See: https://shopify.dev/docs/apps/build/privacy-law-compliance
+  # The app stores no customer PII (shop-level bar config only), so these
+  # handlers acknowledge receipt. They must exist and return 200.
+
+  # Handled by: app/routes/webhooks.customers.data_request.tsx
+  [[webhooks.subscriptions]]
+  topics = ["customers/data_request"]
+  uri = "/webhooks/customers/data_request"
+
+  # Handled by: app/routes/webhooks.customers.redact.tsx
+  [[webhooks.subscriptions]]
+  topics = ["customers/redact"]
+  uri = "/webhooks/customers/redact"
+
+  # Handled by: app/routes/webhooks.shop.redact.tsx
+  [[webhooks.subscriptions]]
+  topics = ["shop/redact"]
+  uri = "/webhooks/shop/redact"
