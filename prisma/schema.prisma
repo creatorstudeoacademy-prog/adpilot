@@ -61,7 +61,7 @@ model ScheduledPost {
   mediaType       String    @default("post") // post | reel | video
   platforms       String    @default("[\"facebook\"]") // JSON array: facebook, instagram
   scheduledAt     DateTime?
-  status          String    @default("draft") // draft | scheduled | published | failed
+  status          String    @default("draft") // draft | scheduled | publishing | published | failed
   publishedAt     DateTime?
   error           String?
   createdAt       DateTime  @default(now())

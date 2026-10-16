@@ -5,8 +5,16 @@ import { createReadableStreamFromReadable } from "@remix-run/node";
 import { RemixServer } from "@remix-run/react";
 import { isbot } from "isbot";
 import { renderToPipeableStream } from "react-dom/server";
+import { startScheduledPostWorker } from "./lib/scheduler.server";
 
 const ABORT_DELAY = 5_000;
+
+// Publish due scheduled posts every 60s. Production only — this module scope
+// never executes during `remix vite:build` or `prisma generate`, and the
+// NODE_ENV guard keeps it off in local dev. Set RUN_WORKER=0 to disable.
+if (process.env.NODE_ENV === "production" && process.env.RUN_WORKER !== "0") {
+  startScheduledPostWorker();
+}
 
 export default function handleRequest(
   request: Request,

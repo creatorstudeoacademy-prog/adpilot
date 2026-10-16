@@ -194,16 +194,6 @@ export default function Dashboard() {
           </BlockStack>
         </Card>
 
-        <Card>
-          <BlockStack gap="300">
-            <Text as="h2" variant="headingMd">
-              Coming soon
-            </Text>
-            <Text as="p" variant="bodyMd" tone="subdued">
-              Messenger auto-reply is on the roadmap.
-            </Text>
-          </BlockStack>
-        </Card>
       </BlockStack>
     </Page>
   );
