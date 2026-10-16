@@ -237,9 +237,27 @@ const MAX_EVENTS = 100;
 function getRecentEvents(shop) {
   return eventsByShop.get(shop) ?? [];
 }
+const loader$6 = async () => {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type"
+    }
+  });
+};
 const action$2 = async ({ request }) => {
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type"
+  };
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
   if (request.method !== "POST") {
-    return json({ ok: false }, { status: 405 });
+    return json({ ok: false }, { status: 405, headers: corsHeaders });
   }
   try {
     const body = await request.json();
@@ -247,7 +265,7 @@ const action$2 = async ({ request }) => {
     const event = String(body.event ?? "").trim();
     const pixel = String(body.pixel ?? "").trim();
     if (!shop || !event || !pixel) {
-      return json({ ok: false }, { status: 400 });
+      return json({ ok: false }, { status: 400, headers: corsHeaders });
     }
     const entry2 = {
       shop,
@@ -259,15 +277,16 @@ const action$2 = async ({ request }) => {
     const list = eventsByShop.get(shop) ?? [];
     list.unshift(entry2);
     eventsByShop.set(shop, list.slice(0, MAX_EVENTS));
-    return json({ ok: true });
+    return json({ ok: true }, { headers: corsHeaders });
   } catch {
-    return json({ ok: false }, { status: 400 });
+    return json({ ok: false }, { status: 400, headers: corsHeaders });
   }
 };
 const route6 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
   action: action$2,
-  getRecentEvents
+  getRecentEvents,
+  loader: loader$6
 }, Symbol.toStringTag, { value: "Module" }));
 const SETTINGS_NAMESPACE = "pixelpro";
 const SETTINGS_KEY = "config";
@@ -658,7 +677,7 @@ const loader$3 = async ({ request }) => {
   });
 };
 async function checkEmbedEnabled(admin) {
-  var _a2, _b, _c, _d, _e, _f, _g, _h;
+  var _a2, _b, _c, _d, _e, _f, _g, _h, _i, _j;
   try {
     const response = await admin.graphql(
       `#graphql
@@ -672,10 +691,10 @@ async function checkEmbedEnabled(admin) {
         }`
     );
     const data = await response.json();
-    const themes = ((_b = (_a2 = data == null ? void 0 : data.data) == null ? void 0 : _a2.themes) == null ? void 0 : _b.nodes) ?? [];
+    if ((_a2 = data == null ? void 0 : data.errors) == null ? void 0 : _a2.length) return { enabled: "unknown" };
+    const themes = ((_c = (_b = data == null ? void 0 : data.data) == null ? void 0 : _b.themes) == null ? void 0 : _c.nodes) ?? [];
     const mainTheme = themes.find((t) => t.role === "MAIN") ?? themes[0];
-    if (!mainTheme) return { enabled: false };
-    const themeId = String(mainTheme.id).split("/").pop();
+    if (!mainTheme) return { enabled: "unknown" };
     const assetResponse = await admin.graphql(
       `#graphql
         query GetSettingsData($themeId: ID!) {
@@ -691,12 +710,12 @@ async function checkEmbedEnabled(admin) {
         }`,
       { variables: { themeId: mainTheme.id } }
     );
-    void themeId;
     const assetData = await assetResponse.json();
-    const content = ((_g = (_f = (_e = (_d = (_c = assetData == null ? void 0 : assetData.data) == null ? void 0 : _c.theme) == null ? void 0 : _d.files) == null ? void 0 : _e.nodes) == null ? void 0 : _f[0]) == null ? void 0 : _g.content) ?? "";
-    if (!content) return { enabled: false };
+    if ((_d = assetData == null ? void 0 : assetData.errors) == null ? void 0 : _d.length) return { enabled: "unknown" };
+    const content = ((_i = (_h = (_g = (_f = (_e = assetData == null ? void 0 : assetData.data) == null ? void 0 : _e.theme) == null ? void 0 : _f.files) == null ? void 0 : _g.nodes) == null ? void 0 : _h[0]) == null ? void 0 : _i.content) ?? "";
+    if (!content) return { enabled: "unknown" };
     const settingsData = JSON.parse(content);
-    const blocks = ((_h = settingsData == null ? void 0 : settingsData.current) == null ? void 0 : _h.blocks) ?? {};
+    const blocks = ((_j = settingsData == null ? void 0 : settingsData.current) == null ? void 0 : _j.blocks) ?? {};
     for (const [key, block] of Object.entries(blocks)) {
       if (key.includes("pixel-pro") || (block == null ? void 0 : block.type) === "pixel-pro") {
         return { enabled: (block == null ? void 0 : block.disabled) !== true };
@@ -704,7 +723,7 @@ async function checkEmbedEnabled(admin) {
     }
     return { enabled: false };
   } catch {
-    return { enabled: false };
+    return { enabled: "unknown" };
   }
 }
 const action = async ({ request }) => {
@@ -926,9 +945,9 @@ function SettingsPage() {
             /* @__PURE__ */ jsx(Card, { children: /* @__PURE__ */ jsxs(BlockStack, { gap: "400", children: [
               /* @__PURE__ */ jsxs(InlineStack, { align: "space-between", blockAlign: "center", children: [
                 /* @__PURE__ */ jsx(Text, { as: "h2", variant: "headingMd", children: "App embed" }),
-                embedEnabled ? /* @__PURE__ */ jsx(Badge, { tone: "success", children: "Enabled" }) : /* @__PURE__ */ jsx(Badge, { tone: "critical", children: "Not enabled" })
+                embedEnabled === "unknown" ? /* @__PURE__ */ jsx(Badge, { children: "Check in theme editor" }) : embedEnabled ? /* @__PURE__ */ jsx(Badge, { tone: "success", children: "Enabled" }) : /* @__PURE__ */ jsx(Badge, { tone: "critical", children: "Not enabled" })
               ] }),
-              /* @__PURE__ */ jsx(Text, { as: "p", variant: "bodyMd", tone: "subdued", children: embedEnabled ? "PixelPro Tracking is active on your theme. Pixels fire on the storefront." : "Turn on the PixelPro Tracking embed in your theme editor to start firing pixels." }),
+              /* @__PURE__ */ jsx(Text, { as: "p", variant: "bodyMd", tone: "subdued", children: embedEnabled === "unknown" ? "Couldn't verify automatically — please confirm PixelPro Tracking is on in the theme editor." : embedEnabled ? "PixelPro Tracking is active on your theme. Pixels fire on the storefront." : "Turn on the PixelPro Tracking embed in your theme editor to start firing pixels." }),
               /* @__PURE__ */ jsx(
                 Button,
                 {
@@ -1048,7 +1067,7 @@ const route12 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.definePrope
   links,
   loader
 }, Symbol.toStringTag, { value: "Module" }));
-const serverManifest = { "entry": { "module": "/assets/entry.client-BeOE-d1E.js", "imports": ["/assets/components-DhY-WGTe.js"], "css": [] }, "routes": { "root": { "id": "root", "parentId": void 0, "path": "", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/root-DfcyJ4NM.js", "imports": ["/assets/components-DhY-WGTe.js"], "css": [] }, "routes/webhooks.customers.data_request": { "id": "routes/webhooks.customers.data_request", "parentId": "root", "path": "webhooks/customers/data_request", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/webhooks.customers.data_request-l0sNRNKZ.js", "imports": [], "css": [] }, "routes/webhooks.app.scopes_update": { "id": "routes/webhooks.app.scopes_update", "parentId": "root", "path": "webhooks/app/scopes_update", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/webhooks.app.scopes_update-l0sNRNKZ.js", "imports": [], "css": [] }, "routes/webhooks.customers.redact": { "id": "routes/webhooks.customers.redact", "parentId": "root", "path": "webhooks/customers/redact", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/webhooks.customers.redact-l0sNRNKZ.js", "imports": [], "css": [] }, "routes/webhooks.app.uninstalled": { "id": "routes/webhooks.app.uninstalled", "parentId": "root", "path": "webhooks/app/uninstalled", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/webhooks.app.uninstalled-l0sNRNKZ.js", "imports": [], "css": [] }, "routes/webhooks.shop.redact": { "id": "routes/webhooks.shop.redact", "parentId": "root", "path": "webhooks/shop/redact", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/webhooks.shop.redact-l0sNRNKZ.js", "imports": [], "css": [] }, "routes/api.pixel-events": { "id": "routes/api.pixel-events", "parentId": "root", "path": "api/pixel-events", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/api.pixel-events-l0sNRNKZ.js", "imports": [], "css": [] }, "routes/app.diagnostics": { "id": "routes/app.diagnostics", "parentId": "routes/app", "path": "diagnostics", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/app.diagnostics-ROgSqPsE.js", "imports": ["/assets/components-DhY-WGTe.js", "/assets/Page-BwWbnNu1.js", "/assets/Layout-U9DlrdpL.js", "/assets/context-DkEZvobt.js"], "css": [] }, "routes/app.billing": { "id": "routes/app.billing", "parentId": "routes/app", "path": "billing", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/app.billing-bPKzJzqh.js", "imports": ["/assets/components-DhY-WGTe.js", "/assets/Page-BwWbnNu1.js", "/assets/Layout-U9DlrdpL.js", "/assets/Banner-BeCarsUe.js", "/assets/context-DkEZvobt.js"], "css": [] }, "routes/app._index": { "id": "routes/app._index", "parentId": "routes/app", "path": void 0, "index": true, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/app._index-BwTntW05.js", "imports": ["/assets/components-DhY-WGTe.js", "/assets/Page-BwWbnNu1.js", "/assets/Banner-BeCarsUe.js", "/assets/Layout-U9DlrdpL.js", "/assets/FormLayout-DRoOMqU-.js", "/assets/context-DkEZvobt.js"], "css": [] }, "routes/_index": { "id": "routes/_index", "parentId": "root", "path": void 0, "index": true, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/_index-CmxG3J36.js", "imports": ["/assets/components-DhY-WGTe.js", "/assets/styles-DyuxoJmC.js", "/assets/Page-BwWbnNu1.js", "/assets/FormLayout-DRoOMqU-.js", "/assets/context-DkEZvobt.js"], "css": [] }, "routes/auth.$": { "id": "routes/auth.$", "parentId": "root", "path": "auth/*", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/auth._-l0sNRNKZ.js", "imports": [], "css": [] }, "routes/app": { "id": "routes/app", "parentId": "root", "path": "app", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": true, "module": "/assets/app-BVQ8-x3x.js", "imports": ["/assets/components-DhY-WGTe.js", "/assets/styles-DyuxoJmC.js", "/assets/context-DkEZvobt.js"], "css": [] } }, "url": "/assets/manifest-d1513d20.js", "version": "d1513d20" };
+const serverManifest = { "entry": { "module": "/assets/entry.client-BeOE-d1E.js", "imports": ["/assets/components-DhY-WGTe.js"], "css": [] }, "routes": { "root": { "id": "root", "parentId": void 0, "path": "", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/root-DfcyJ4NM.js", "imports": ["/assets/components-DhY-WGTe.js"], "css": [] }, "routes/webhooks.customers.data_request": { "id": "routes/webhooks.customers.data_request", "parentId": "root", "path": "webhooks/customers/data_request", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/webhooks.customers.data_request-l0sNRNKZ.js", "imports": [], "css": [] }, "routes/webhooks.app.scopes_update": { "id": "routes/webhooks.app.scopes_update", "parentId": "root", "path": "webhooks/app/scopes_update", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/webhooks.app.scopes_update-l0sNRNKZ.js", "imports": [], "css": [] }, "routes/webhooks.customers.redact": { "id": "routes/webhooks.customers.redact", "parentId": "root", "path": "webhooks/customers/redact", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/webhooks.customers.redact-l0sNRNKZ.js", "imports": [], "css": [] }, "routes/webhooks.app.uninstalled": { "id": "routes/webhooks.app.uninstalled", "parentId": "root", "path": "webhooks/app/uninstalled", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/webhooks.app.uninstalled-l0sNRNKZ.js", "imports": [], "css": [] }, "routes/webhooks.shop.redact": { "id": "routes/webhooks.shop.redact", "parentId": "root", "path": "webhooks/shop/redact", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/webhooks.shop.redact-l0sNRNKZ.js", "imports": [], "css": [] }, "routes/api.pixel-events": { "id": "routes/api.pixel-events", "parentId": "root", "path": "api/pixel-events", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/api.pixel-events-l0sNRNKZ.js", "imports": [], "css": [] }, "routes/app.diagnostics": { "id": "routes/app.diagnostics", "parentId": "routes/app", "path": "diagnostics", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/app.diagnostics-ROgSqPsE.js", "imports": ["/assets/components-DhY-WGTe.js", "/assets/Page-BwWbnNu1.js", "/assets/Layout-U9DlrdpL.js", "/assets/context-DkEZvobt.js"], "css": [] }, "routes/app.billing": { "id": "routes/app.billing", "parentId": "routes/app", "path": "billing", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/app.billing-bPKzJzqh.js", "imports": ["/assets/components-DhY-WGTe.js", "/assets/Page-BwWbnNu1.js", "/assets/Layout-U9DlrdpL.js", "/assets/Banner-BeCarsUe.js", "/assets/context-DkEZvobt.js"], "css": [] }, "routes/app._index": { "id": "routes/app._index", "parentId": "routes/app", "path": void 0, "index": true, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/app._index-CxHX9BuT.js", "imports": ["/assets/components-DhY-WGTe.js", "/assets/Page-BwWbnNu1.js", "/assets/Banner-BeCarsUe.js", "/assets/Layout-U9DlrdpL.js", "/assets/FormLayout-DRoOMqU-.js", "/assets/context-DkEZvobt.js"], "css": [] }, "routes/_index": { "id": "routes/_index", "parentId": "root", "path": void 0, "index": true, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/_index-CmxG3J36.js", "imports": ["/assets/components-DhY-WGTe.js", "/assets/styles-DyuxoJmC.js", "/assets/Page-BwWbnNu1.js", "/assets/FormLayout-DRoOMqU-.js", "/assets/context-DkEZvobt.js"], "css": [] }, "routes/auth.$": { "id": "routes/auth.$", "parentId": "root", "path": "auth/*", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/auth._-l0sNRNKZ.js", "imports": [], "css": [] }, "routes/app": { "id": "routes/app", "parentId": "root", "path": "app", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": true, "module": "/assets/app-BVQ8-x3x.js", "imports": ["/assets/components-DhY-WGTe.js", "/assets/styles-DyuxoJmC.js", "/assets/context-DkEZvobt.js"], "css": [] } }, "url": "/assets/manifest-615a4183.js", "version": "615a4183" };
 const mode = "production";
 const assetsBuildDirectory = "build/client";
 const basename = "/";

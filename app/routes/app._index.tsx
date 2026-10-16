@@ -89,10 +89,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 /**
  * Checks whether the PixelPro app embed block is enabled on the published theme.
  * Reads the main theme's settings_data.json via the Asset API (needs read_themes).
+ * Returns "unknown" if the check can't run (e.g. missing scope) so the UI
+ * doesn't show a misleading "Not enabled".
  */
 async function checkEmbedEnabled(
   admin: any,
-): Promise<{ enabled: boolean }> {
+): Promise<{ enabled: boolean | "unknown" }> {
   try {
     const response = await admin.graphql(
       `#graphql
@@ -106,11 +108,10 @@ async function checkEmbedEnabled(
         }`,
     );
     const data = await response.json();
+    if (data?.errors?.length) return { enabled: "unknown" };
     const themes = data?.data?.themes?.nodes ?? [];
     const mainTheme = themes.find((t: any) => t.role === "MAIN") ?? themes[0];
-    if (!mainTheme) return { enabled: false };
-
-    const themeId = String(mainTheme.id).split("/").pop();
+    if (!mainTheme) return { enabled: "unknown" };
 
     const assetResponse = await admin.graphql(
       `#graphql
@@ -127,11 +128,11 @@ async function checkEmbedEnabled(
         }`,
       { variables: { themeId: mainTheme.id } },
     );
-    void themeId;
     const assetData = await assetResponse.json();
+    if (assetData?.errors?.length) return { enabled: "unknown" };
     const content =
       assetData?.data?.theme?.files?.nodes?.[0]?.content ?? "";
-    if (!content) return { enabled: false };
+    if (!content) return { enabled: "unknown" };
 
     const settingsData = JSON.parse(content);
     const blocks = settingsData?.current?.blocks ?? {};
@@ -143,7 +144,7 @@ async function checkEmbedEnabled(
     }
     return { enabled: false };
   } catch {
-    return { enabled: false };
+    return { enabled: "unknown" };
   }
 }
 
@@ -440,16 +441,20 @@ export default function SettingsPage() {
                     <Text as="h2" variant="headingMd">
                       App embed
                     </Text>
-                    {embedEnabled ? (
+                    {embedEnabled === "unknown" ? (
+                      <Badge>Check in theme editor</Badge>
+                    ) : embedEnabled ? (
                       <Badge tone="success">Enabled</Badge>
                     ) : (
                       <Badge tone="critical">Not enabled</Badge>
                     )}
                   </InlineStack>
                   <Text as="p" variant="bodyMd" tone="subdued">
-                    {embedEnabled
-                      ? "PixelPro Tracking is active on your theme. Pixels fire on the storefront."
-                      : "Turn on the PixelPro Tracking embed in your theme editor to start firing pixels."}
+                    {embedEnabled === "unknown"
+                      ? "Couldn't verify automatically — please confirm PixelPro Tracking is on in the theme editor."
+                      : embedEnabled
+                        ? "PixelPro Tracking is active on your theme. Pixels fire on the storefront."
+                        : "Turn on the PixelPro Tracking embed in your theme editor to start firing pixels."}
                   </Text>
                   <Button
                     url={`https://admin.shopify.com/store/${shopDomain.replace(".myshopify.com", "")}/themes/current/editor?context=apps`}
