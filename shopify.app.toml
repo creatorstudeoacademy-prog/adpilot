@@ -1,10 +1,10 @@
 # Learn more about configuring your app:
 # https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = ""
+client_id = "54429c56772f939498b5a993285b0ed2"
 name = "PixelPro - Multi Pixel Manager"
 handle = "pixelpro-manager"
-application_url = ""
+application_url = "https://pixelpro-manager-production.up.railway.app"
 embedded = true
 
 [access_scopes]
@@ -13,7 +13,7 @@ embedded = true
 scopes = ""
 
 [auth]
-redirect_urls = []
+redirect_urls = ["https://pixelpro-manager-production.up.railway.app/auth/callback"]
 
 [webhooks]
 api_version = "2026-01"
