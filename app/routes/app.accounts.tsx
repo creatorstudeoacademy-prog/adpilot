@@ -23,6 +23,7 @@ import {
 
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { createMetaConnectParams } from "../lib/meta-oauth.server";
 
 const GRAPH_VERSION = "v21.0";
 
@@ -81,6 +82,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   return json({
     shop,
+    // Signed, short-lived connect URL — minted here (authenticated session)
+    // so the top-level OAuth tab can verify it without a Shopify session.
+    metaConnectUrl: `/auth/meta?${createMetaConnectParams(shop)}`,
     metaConfigured: metaAppId.length > 0,
     pages: pages.map((a, i) => ({
       id: a.id,
@@ -178,7 +182,7 @@ function AccountCard({
 }
 
 export default function AccountsPage() {
-  const { shop, metaConfigured, pages, instagrams, adAccounts } =
+  const { shop, metaConfigured, metaConnectUrl, pages, instagrams, adAccounts } =
     useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -226,7 +230,7 @@ export default function AccountsPage() {
             {metaConfigured && (
               <Button
                 variant="primary"
-                url={`/auth/meta?shop=${encodeURIComponent(shop)}`}
+                url={metaConnectUrl}
                 target="_blank"
               >
                 Connect Facebook

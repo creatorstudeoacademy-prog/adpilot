@@ -1,7 +1,10 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { redirect } from "@remix-run/node";
 
-import { authenticate } from "../shopify.server";
+import {
+  encodeMetaState,
+  verifyMetaConnectParams,
+} from "../lib/meta-oauth.server";
 
 const META_SCOPES = [
   "pages_show_list",
@@ -13,10 +16,21 @@ const META_SCOPES = [
 
 /**
  * Starts the Facebook OAuth flow.
- * Requires a Shopify admin session so we know which shop is connecting.
+ *
+ * Runs in a top-level browser tab (Facebook blocks iframes), so it does NOT
+ * use shopify.authenticate.admin() — there is no Shopify session in a fresh
+ * tab. Instead it verifies the HMAC-signed params minted by the Accounts page
+ * loader (which runs with a valid admin session).
  */
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+  const url = new URL(request.url);
+  const shop = verifyMetaConnectParams(url.searchParams);
+  if (!shop) {
+    throw new Response(
+      "This Facebook connect link is invalid or has expired. Please go back to the Accounts page in Shopify admin and click Connect Facebook again.",
+      { status: 403 },
+    );
+  }
 
   const appId = process.env.META_APP_ID;
   const appUrl = process.env.SHOPIFY_APP_URL;
@@ -29,9 +43,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   const redirectUri = `${appUrl}/auth/meta/callback`;
-  // Pass the shop through `state` so the callback knows who connected.
-  const url = new URL(request.url);
-  const state = url.searchParams.get("shop") ?? "";
+  // Carry the signed bundle through `state` so the callback can verify it.
+  const state = encodeMetaState(
+    shop,
+    url.searchParams.get("ts") ?? "",
+    url.searchParams.get("sig") ?? "",
+  );
 
   const params = new URLSearchParams({
     client_id: appId,

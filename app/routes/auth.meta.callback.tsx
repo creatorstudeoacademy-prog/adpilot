@@ -2,7 +2,7 @@ import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { useLoaderData } from "@remix-run/react";
 
-import { authenticate } from "../shopify.server";
+import { verifyMetaState } from "../lib/meta-oauth.server";
 import prisma from "../db.server";
 
 interface TokenResponse {
@@ -27,8 +27,18 @@ interface PagesResponse {
  * 3. Stores each Page (with its Page token + linked Instagram ID) as a SocialAccount.
  */
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
-  const shop = session.shop;
+  const url = new URL(request.url);
+  // The callback also runs top-level (from Facebook) with no Shopify session —
+  // verify the signed `state` minted at flow start instead.
+  const shop = verifyMetaState(url.searchParams.get("state"));
+  if (!shop) {
+    return json({
+      ok: false,
+      error: "invalid_state",
+      message:
+        "This Facebook connect session is invalid or has expired. Please start again from the Accounts page.",
+    });
+  }
 
   const appId = process.env.META_APP_ID;
   const appSecret = process.env.META_APP_SECRET;
@@ -40,7 +50,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     });
   }
 
-  const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const error = url.searchParams.get("error");
 
@@ -158,13 +167,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 export default function MetaCallback() {
   const data = useLoaderData<typeof loader>() as
     | { ok: true; pages: number }
-    | { ok: false; error: string };
+    | { ok: false; error: string; message?: string };
 
   const ok = data.ok === true;
   const title = ok ? "Facebook connected" : "Connection failed";
   const message = ok
     ? `Connected ${data.pages} Facebook Page${data.pages === 1 ? "" : "s"}. You can close this tab and return to your Shopify admin — your accounts will appear there.`
-    : "The Facebook connection did not complete. Close this tab and try again from the Accounts page.";
+    : (data as { message?: string }).message ||
+      "The Facebook connection did not complete. Close this tab and try again from the Accounts page.";
 
   return (
     <html lang="en">
