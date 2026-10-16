@@ -4,10 +4,10 @@
 # NOTE: client_id belongs to the PixelPro Partner app entry.
 # Create a new Partner app entry for AdPilot and update client_id,
 # application_url, and redirect_urls before deploying.
-client_id = "54429c56772f939498b5a993285b0ed2"
-name = "AdPilot - Social Media Command Center"
+client_id = "f5feb18942e0d098f96e02c31159d136"
+name = "AdPilot - Social Media Command"
 handle = "adpilot"
-application_url = "https://adpilot-production.up.railway.app"
+application_url = "https://adpilot-production-c9f8.up.railway.app"
 embedded = true
 
 [access_scopes]
@@ -16,7 +16,7 @@ embedded = true
 scopes = ""
 
 [auth]
-redirect_urls = ["https://adpilot-production.up.railway.app/auth/callback"]
+redirect_urls = ["https://adpilot-production-c9f8.up.railway.app/auth/callback"]
 
 [webhooks]
 api_version = "2026-01"
