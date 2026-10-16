@@ -591,6 +591,10 @@ export default function CreateCampaign() {
                   The daily budget is billed separately by Meta to your ad
                   account.
                 </Text>
+                <Text as="p" variant="bodySm" tone="critical">
+                  This action is irreversible. The publishing fee will be
+                  deducted from your wallet immediately and cannot be refunded.
+                </Text>
               </BlockStack>
 
               <InlineStack align="space-between">
