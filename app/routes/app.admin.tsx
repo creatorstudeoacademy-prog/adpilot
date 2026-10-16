@@ -434,6 +434,7 @@ function AgentsSection({
 }) {
   const [sectors, setSectors] = useState<string[]>(["all"]);
   const [priority, setPriority] = useState("0");
+  const [agentName, setAgentName] = useState("");
   const [enabled, setEnabled] = useState(true);
   const [isMain, setIsMain] = useState(false);
   const statusTone = (s: string) =>
@@ -470,6 +471,8 @@ function AgentsSection({
                       label="Agent name"
                       name="name"
                       placeholder="e.g. Caption Pro"
+                      value={agentName}
+                      onChange={setAgentName}
                       autoComplete="off"
                     />
                   </Grid.Cell>
