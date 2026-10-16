@@ -11,11 +11,11 @@ import prisma from "./db.server";
 
 /**
  * Billing plan identifiers.
- * The AdPilot Starter plan is created on demand via the Billing API (no Partner
+ * The AdPilot Pro plan is created on demand via the Billing API (no Partner
  * Dashboard setup needed). `isTest` is enabled outside production so
  * review/dev charges never bill real money.
  */
-export const PRO_PLAN = "adpilot-starter";
+export const PRO_PLAN = "adpilot-pro";
 
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
@@ -30,7 +30,7 @@ const shopify = shopifyApp({
     [PRO_PLAN]: {
       lineItems: [
         {
-          amount: 9.99,
+          amount: 19.99,
           currencyCode: "USD",
           interval: BillingInterval.Every30Days,
         },

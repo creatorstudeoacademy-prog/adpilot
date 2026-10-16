@@ -19,11 +19,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const [accounts, scheduledCount, publishedCount] = await Promise.all([
-    prisma.socialAccount.findMany({ where: { shop } }),
-    prisma.scheduledPost.count({ where: { shop, status: "scheduled" } }),
-    prisma.scheduledPost.count({ where: { shop, status: "published" } }),
-  ]);
+  const [accounts, scheduledCount, publishedCount, activeCampaigns, wallet] =
+    await Promise.all([
+      prisma.socialAccount.findMany({ where: { shop } }),
+      prisma.scheduledPost.count({ where: { shop, status: "scheduled" } }),
+      prisma.scheduledPost.count({ where: { shop, status: "published" } }),
+      prisma.campaign.count({ where: { shop, status: "active" } }),
+      prisma.wallet.findUnique({ where: { shop } }),
+    ]);
 
   return json({
     shop,
@@ -35,12 +38,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     })),
     scheduledCount,
     publishedCount,
+    activeCampaigns,
+    walletBalance: wallet?.balance ?? 0,
   });
 };
 
 export default function Dashboard() {
-  const { accountCount, accounts, scheduledCount, publishedCount } =
-    useLoaderData<typeof loader>();
+  const {
+    accountCount,
+    accounts,
+    scheduledCount,
+    publishedCount,
+    activeCampaigns,
+    walletBalance,
+  } = useLoaderData<typeof loader>();
 
   return (
     <Page
@@ -144,12 +155,36 @@ export default function Dashboard() {
 
         <Card>
           <BlockStack gap="300">
+            <InlineStack align="space-between" blockAlign="center">
+              <Text as="h2" variant="headingMd">
+                Ads Manager
+              </Text>
+              <Button url="/app/ads" variant="primary" size="slim">
+                Open Ads Manager
+              </Button>
+            </InlineStack>
+            <InlineStack gap="300">
+              <Text as="p" variant="bodyMd">
+                Active campaigns: <strong>{activeCampaigns}</strong>
+              </Text>
+              <Text as="p" variant="bodyMd">
+                Wallet: <strong>${walletBalance.toFixed(2)}</strong>
+              </Text>
+            </InlineStack>
+            <InlineStack gap="300">
+              <Button url="/app/ads/create">Create campaign</Button>
+              <Button url="/app/wallet">Top up wallet</Button>
+            </InlineStack>
+          </BlockStack>
+        </Card>
+
+        <Card>
+          <BlockStack gap="300">
             <Text as="h2" variant="headingMd">
               Coming soon
             </Text>
             <Text as="p" variant="bodyMd" tone="subdued">
-              Ads Manager — create and run Facebook & Instagram ads right from
-              AdPilot. Messenger auto-reply is also on the roadmap.
+              Messenger auto-reply is on the roadmap.
             </Text>
           </BlockStack>
         </Card>

@@ -22,8 +22,8 @@ import {
 import { PRO_PLAN, authenticate } from "../shopify.server";
 
 const IS_TEST_BILLING = process.env.NODE_ENV !== "production";
-const PLAN_PRICE = "$9.99";
-const PLAN_NAME = "AdPilot Starter";
+const PLAN_PRICE = "$19.99";
+const PLAN_NAME = "AdPilot Pro";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { billing } = await authenticate.admin(request);
@@ -152,6 +152,8 @@ export default function BillingPage() {
                         <List.Item>Unlimited scheduled posts</List.Item>
                         <List.Item>Post, Reel & Video publishing</List.Item>
                         <List.Item>Facebook + Instagram publishing</List.Item>
+                        <List.Item>Meta Ads Manager — all objectives</List.Item>
+                        <List.Item>Wallet topups for ad spend</List.Item>
                         <List.Item>Priority support</List.Item>
                       </List>
                     </BlockStack>

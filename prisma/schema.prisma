@@ -66,3 +66,68 @@ model ScheduledPost {
   error           String?
   createdAt       DateTime  @default(now())
 }
+
+/// A connected Meta ad account (for running ads).
+model AdAccount {
+  id           String   @id @default(cuid())
+  shop         String
+  adAccountId  String   // Meta ad account ID (act_XXXX without the act_ prefix)
+  adAccountName String
+  accessToken  String
+  currency     String   @default("USD")
+  createdAt    DateTime @default(now())
+
+  campaigns Campaign[]
+
+  @@unique([shop, adAccountId])
+}
+
+/// An ad campaign created through AdPilot.
+model Campaign {
+  id             String   @id @default(cuid())
+  shop           String
+  adAccountId    String
+  adAccount      AdAccount @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+  metaCampaignId String?  // Meta's campaign ID after publish
+  metaAdSetId    String?
+  metaAdId       String?
+  name           String
+  objective      String   // AWARENESS | TRAFFIC | ENGAGEMENT | SALES
+  status         String   @default("draft") // draft | active | paused | failed
+  dailyBudget    Float    // in account currency
+  totalBudget    Float?
+  startDate      DateTime?
+  endDate        DateTime?
+  headline       String?
+  primaryText    String?
+  description    String?
+  imageUrl       String?
+  destinationUrl String?
+  cta            String?  // call-to-action button type
+  error          String?
+  createdAt      DateTime @default(now())
+}
+
+/// A merchant's AdPilot wallet for ad spend topups.
+model Wallet {
+  id        String   @id @default(cuid())
+  shop      String   @unique
+  balance   Float    @default(0)
+  currency  String   @default("USD")
+  updatedAt DateTime @updatedAt
+
+  transactions WalletTransaction[]
+}
+
+/// A wallet transaction (topup, ad spend, refund).
+model WalletTransaction {
+  id          String   @id @default(cuid())
+  shop        String
+  walletId    String
+  wallet      Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  amount      Float    // positive for topup/refund, negative for spend
+  type        String   // topup | ad_spend | refund
+  description String?
+  metaRef     String?  // reference to campaign or charge ID
+  createdAt   DateTime @default(now())
+}
