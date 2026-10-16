@@ -10,7 +10,7 @@ embedded = true
 [access_scopes]
 # This app stores its configuration in shop metafields (custom namespace)
 # and bills through the Billing API. No additional access scopes are required.
-scopes = ""
+scopes = "write_pixels,read_pixels"
 
 [auth]
 redirect_urls = ["https://pixelpro-manager-production.up.railway.app/auth/callback"]
