@@ -27,10 +27,9 @@ import { PRO_PLAN, authenticate } from "../shopify.server";
 import {
   DEFAULT_SETTINGS,
   PRO_ONLY_FIELDS,
-  getSettings,
-  saveSettings,
   type PixelSettings,
-} from "../lib/settings.server";
+} from "../lib/settings";
+import { getSettings, saveSettings } from "../lib/settings.server";
 
 const IS_TEST_BILLING = process.env.NODE_ENV !== "production";
 
