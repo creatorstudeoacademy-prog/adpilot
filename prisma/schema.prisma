@@ -79,6 +79,8 @@ model AdAccount {
 
   campaigns Campaign[]
 
+  audiences Audience[]
+
   @@unique([shop, adAccountId])
 }
 
@@ -110,6 +112,8 @@ model Campaign {
   funnelGroupId  String?
   funnelGroup    FunnelGroup? @relation(fields: [funnelGroupId], references: [id], onDelete: SetNull)
   funnelStage    String?  // TOF | MOF | BOF — set for funnel campaigns
+  audienceDbId   String?  // Audience.id — when a saved audience was used
+  audienceName   String?  // snapshot of the audience name at publish
   metaCampaignId String?  // Meta's campaign ID after publish
   metaAdSetId    String?
   metaAdId       String?
@@ -129,6 +133,25 @@ model Campaign {
   adSetCount     Int      @default(1)
   creativeCount  Int      @default(1)
   publishFee     Float?   // total wallet fee charged at publish (USD)
+  error          String?
+  createdAt      DateTime @default(now())
+}
+
+/// A standalone audience created through Audience Manager.
+/// (Funnel auto-creates its own audiences; those are not stored here.)
+model Audience {
+  id             String   @id @default(cuid())
+  shop           String
+  adAccountId    String
+  adAccount      AdAccount @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+  metaAudienceId String?
+  name           String
+  type           String   // website | video | engagement | interest | lookalike
+  subtype        String?  // Meta subtype used
+  config         String   @default("{}") // JSON: retention, country, interests, etc.
+  approxCount    Int?
+  status         String   @default("active") // active | failed
+  publishFee     Float?
   error          String?
   createdAt      DateTime @default(now())
 }

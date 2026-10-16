@@ -29,6 +29,12 @@ export const EXTRA_CREATIVE_FEE = 1;
 /** Fee per custom/saved audience created for a funnel (USD). */
 export const AUDIENCE_FEE = 1;
 
+/** Fee for a standalone audience from Audience Manager (USD). */
+export const STANDALONE_AUDIENCE_FEE = 1;
+
+/** Fee for a lookalike audience (USD). */
+export const LOOKALIKE_AUDIENCE_FEE = 1.5;
+
 /** Full-funnel fee breakdown: 3 campaigns + 3 audiences = $10.50 */
 export const FUNNEL_CAMPAIGN_FEE =
   OBJECTIVE_FEES.AWARENESS + OBJECTIVE_FEES.ENGAGEMENT + OBJECTIVE_FEES.SALES; // 2 + 2.5 + 3 = 7.5

@@ -123,6 +123,7 @@ export async function createAdSet(
   dailyBudget: number,
   startDate?: Date | null,
   endDate?: Date | null,
+  customTargeting?: Record<string, unknown>,
 ): Promise<string> {
   const params: Record<string, string> = {
     name,
@@ -131,11 +132,13 @@ export async function createAdSet(
     billing_event: "IMPRESSIONS",
     optimization_goal: "REACH",
     bid_strategy: "LOWEST_COST_WITHOUT_CAP",
-    targeting: JSON.stringify({
-      geo_locations: { countries: ["US"] },
-      age_min: 18,
-      age_max: 65,
-    }),
+    targeting: JSON.stringify(
+      customTargeting ?? {
+        geo_locations: { countries: ["US"] },
+        age_min: 18,
+        age_max: 65,
+      },
+    ),
     status: "PAUSED",
   };
   if (startDate) params.start_time = startDate.toISOString();
@@ -233,6 +236,8 @@ export async function publishFullCampaign(input: {
   objective: string;
   adSets: PublishAdSetInput[];
   creatives: PublishCreativeInput[];
+  /** Optional per-ad-set custom targeting (e.g. saved/custom audiences). */
+  adSetTargeting?: Record<string, unknown>;
 }): Promise<{ campaignId: string; adSetIds: string[]; adIds: string[] }> {
   if (input.adSets.length === 0) throw new Error("At least one ad set is required.");
   if (input.creatives.length === 0) throw new Error("At least one creative is required.");
@@ -257,6 +262,7 @@ export async function publishFullCampaign(input: {
       adSet.dailyBudget,
       adSet.startDate,
       adSet.endDate,
+      input.adSetTargeting,
     );
     adSetIds.push(adSetId);
 
@@ -323,8 +329,241 @@ export async function toggleCampaign(
 }
 
 /* ------------------------------------------------------------------ */
-/* Full-funnel helpers: audiences + 3-stage campaign creation          */
+/* Standalone Audience Manager helpers                                 */
 /* ------------------------------------------------------------------ */
+
+export interface WebsiteAudienceInput {
+  name: string;
+  pixelId: string;
+  retentionDays?: number; // 30 | 60 | 90 | 180
+  urlContains?: string; // e.g. "/products" — empty = all visitors
+}
+
+/** Website Visitors custom audience (subtype WEBSITE). */
+export async function createWebsiteAudience(
+  adAccountId: string,
+  accessToken: string,
+  input: WebsiteAudienceInput,
+): Promise<string> {
+  const retentionSeconds = (input.retentionDays ?? 180) * 86400;
+  const data = await marketingFetch(
+    `/act_${adAccountId}/customaudiences`,
+    accessToken,
+    {
+      name: input.name,
+      description: "Website visitors",
+      subtype: "WEBSITE",
+      rule: JSON.stringify({
+        inclusions: {
+          operator: "or",
+          rules: [
+            {
+              event_sources: [{ id: input.pixelId, type: "pixel" }],
+              retention_seconds: retentionSeconds,
+              filter: {
+                operator: "or",
+                filters: [
+                  {
+                    field: "url",
+                    operator: "i_contains",
+                    value: input.urlContains ?? "",
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      }),
+      prefill: "true",
+    },
+  );
+  return data.id as string;
+}
+
+export interface VideoAudienceInput {
+  name: string;
+  pageId: string;
+  /** Watch percentage threshold: 25 | 50 | 75 | 95 */
+  watchPercent?: number;
+  retentionDays?: number;
+}
+
+/** Video Viewers custom audience (subtype VIDEO) for a Page's videos. */
+export async function createVideoAudience(
+  adAccountId: string,
+  accessToken: string,
+  input: VideoAudienceInput,
+): Promise<string> {
+  const retentionSeconds = (input.retentionDays ?? 180) * 86400;
+  const data = await marketingFetch(
+    `/act_${adAccountId}/customaudiences`,
+    accessToken,
+    {
+      name: input.name,
+      description: `Video viewers (${input.watchPercent ?? 50}% watched)`,
+      subtype: "VIDEO",
+      rule: JSON.stringify({
+        inclusions: {
+          operator: "or",
+          rules: [
+            {
+              event_sources: [{ id: input.pageId, type: "page" }],
+              retention_seconds: retentionSeconds,
+              filter: {
+                operator: "or",
+                filters: [
+                  {
+                    field: "event",
+                    operator: "equal",
+                    value: "video_view",
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      }),
+      prefill: "true",
+    },
+  );
+  return data.id as string;
+}
+
+export interface EngagementAudienceInput {
+  name: string;
+  pageId: string;
+  retentionDays?: number;
+}
+
+/** Page Engagers custom audience (subtype ENGAGEMENT). */
+export async function createEngagementAudience(
+  adAccountId: string,
+  accessToken: string,
+  input: EngagementAudienceInput,
+): Promise<string> {
+  return createCustomAudience(adAccountId, accessToken, {
+    name: input.name,
+    description: "People who engaged with the Page",
+    subtype: "VIDEO",
+    sourceId: input.pageId,
+    retentionDays: input.retentionDays ?? 180,
+  });
+}
+
+export interface InterestAudienceInput {
+  name: string;
+  country: string;
+  ageMin: number;
+  ageMax: number;
+  interestKeywords: string[]; // resolved to Meta interest IDs via search
+}
+
+/** Search Meta's interest taxonomy for keyword matches. */
+export async function searchInterests(
+  accessToken: string,
+  keyword: string,
+): Promise<Array<{ id: string; name: string }>> {
+  const data = await marketingFetch(
+    "/search",
+    accessToken,
+    { type: "adinterest", q: keyword, limit: "5" },
+    "GET",
+  );
+  return (data.data ?? []) as Array<{ id: string; name: string }>;
+}
+
+/**
+ * Interest-based saved audience: country + age + interests.
+ * Keywords are resolved to Meta interest IDs via the search API.
+ */
+export async function createInterestAudience(
+  adAccountId: string,
+  accessToken: string,
+  input: InterestAudienceInput,
+): Promise<{ id: string; resolvedInterests: Array<{ id: string; name: string }> }> {
+  const resolved: Array<{ id: string; name: string }> = [];
+  for (const kw of input.interestKeywords.slice(0, 5)) {
+    try {
+      const hits = await searchInterests(accessToken, kw);
+      if (hits.length > 0 && !resolved.some((r) => r.id === hits[0].id)) {
+        resolved.push(hits[0]);
+      }
+    } catch {
+      // skip unresolvable keywords
+    }
+  }
+  if (resolved.length === 0) {
+    throw new Error(
+      "Could not match your keywords to Meta interests. Try different keywords.",
+    );
+  }
+  const id = await createSavedAudience(adAccountId, accessToken, input.name, {
+    countries: [input.country],
+    ageMin: input.ageMin,
+    ageMax: input.ageMax,
+  }).then(async (savedId) => {
+    // Attach interests by updating the saved audience targeting.
+    await marketingFetch(`/${savedId}`, accessToken, {
+      targeting: JSON.stringify({
+        geo_locations: { countries: [input.country] },
+        age_min: input.ageMin,
+        age_max: input.ageMax,
+        interests: resolved.map((r) => ({ id: r.id, name: r.name })),
+      }),
+    });
+    return savedId;
+  });
+  return { id, resolvedInterests: resolved };
+}
+
+export interface LookalikeAudienceInput {
+  name: string;
+  sourceAudienceId: string; // Meta custom-audience ID
+  country: string;
+  /** 0.01 = 1% similarity */
+  ratio?: number;
+}
+
+/** Lookalike audience based on an existing custom audience. */
+export async function createLookalikeAudience(
+  adAccountId: string,
+  accessToken: string,
+  input: LookalikeAudienceInput,
+): Promise<string> {
+  const data = await marketingFetch(
+    `/act_${adAccountId}/customaudiences`,
+    accessToken,
+    {
+      name: input.name,
+      description: "Lookalike audience",
+      subtype: "LOOKALIKE",
+      origin_audience_id: input.sourceAudienceId,
+      lookalike_spec: JSON.stringify({
+        country: input.country,
+        ratio: input.ratio ?? 0.01,
+        type: "similarity",
+      }),
+    },
+  );
+  return data.id as string;
+}
+
+/** List custom audiences on the ad account (for status/size display). */
+export async function listCustomAudiences(adAccountId: string, accessToken: string) {
+  const data = await marketingFetch(
+    `/act_${adAccountId}/customaudiences`,
+    accessToken,
+    { fields: "id,name,subtype,approximate_count,description", limit: "100" },
+    "GET",
+  );
+  return (data.data ?? []) as Array<{
+    id: string;
+    name: string;
+    subtype: string;
+    approximate_count?: number;
+    description?: string;
+  }>;
+}
 
 export interface SavedAudienceTargeting {
   countries: string[];

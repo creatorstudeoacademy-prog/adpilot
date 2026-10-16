@@ -30,6 +30,7 @@ export default function App() {
         <Link to="/app/scheduled">Scheduled</Link>
         <Link to="/app/ads">Ads</Link>
         <Link to="/app/ads/funnel">Full Funnel</Link>
+        <Link to="/app/ads/audiences">Audiences</Link>
         <Link to="/app/wallet">Wallet</Link>
         <Link to="/app/billing">Pricing</Link>
       </NavMenu>

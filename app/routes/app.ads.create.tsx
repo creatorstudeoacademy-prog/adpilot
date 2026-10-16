@@ -56,6 +56,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   if (adAccounts.length === 0) return redirect("/app/ads/connect");
 
+  const audiences = await prisma.audience.findMany({
+    where: { shop, status: "active", metaAudienceId: { not: null } },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      name: true,
+      type: true,
+      subtype: true,
+      metaAudienceId: true,
+      approxCount: true,
+    },
+  });
+
   return json({
     adAccounts: adAccounts.map((a) => ({
       id: a.id,
@@ -65,6 +78,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     })),
     walletBalance: wallet.balance,
     pages,
+    audiences,
   });
 };
 
@@ -80,6 +94,45 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const startDateStr = String(form.get("startDate") ?? "");
   const endDateStr = String(form.get("endDate") ?? "");
   const adSetCount = Math.min(5, Math.max(1, parseInt(String(form.get("adSetCount") ?? "1"), 10) || 1));
+
+  // Audience / targeting selection.
+  const targetingMode = String(form.get("targetingMode") ?? "new"); // new | saved
+  const audienceDbId = String(form.get("audienceDbId") ?? "");
+  const country = String(form.get("country") ?? "US");
+  const ageMin = parseInt(String(form.get("ageMin") ?? "18"), 10) || 18;
+  const ageMax = parseInt(String(form.get("ageMax") ?? "65"), 10) || 65;
+
+  let adSetTargeting: Record<string, unknown> | undefined;
+  let audienceName: string | null = null;
+  if (targetingMode === "saved" && audienceDbId) {
+    const audience = await prisma.audience.findFirst({
+      where: { id: audienceDbId, shop, status: "active" },
+    });
+    if (!audience?.metaAudienceId) {
+      return json({ ok: false, error: "Selected audience is not available." });
+    }
+    audienceName = audience.name;
+    adSetTargeting =
+      audience.subtype === "SAVED"
+        ? {
+            saved_audience_id: audience.metaAudienceId,
+            geo_locations: { countries: [country] },
+            age_min: ageMin,
+            age_max: ageMax,
+          }
+        : {
+            custom_audiences: [{ id: audience.metaAudienceId }],
+            geo_locations: { countries: [country] },
+            age_min: ageMin,
+            age_max: ageMax,
+          };
+  } else {
+    adSetTargeting = {
+      geo_locations: { countries: [country] },
+      age_min: ageMin,
+      age_max: ageMax,
+    };
+  }
 
   let creatives: Array<{
     headline: string;
@@ -159,6 +212,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       adSetCount,
       creativeCount: creatives.length,
       publishFee: fee.total,
+      audienceDbId: targetingMode === "saved" && audienceDbId ? audienceDbId : null,
+      audienceName,
     },
   });
 
@@ -184,6 +239,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         endDate: endDateStr ? new Date(endDateStr) : null,
       })),
       creatives,
+      adSetTargeting,
     });
 
     await prisma.campaign.update({
@@ -228,7 +284,7 @@ const EMPTY_CREATIVE: CreativeForm = {
 };
 
 export default function CreateCampaign() {
-  const { adAccounts, walletBalance, pages } = useLoaderData<typeof loader>();
+  const { adAccounts, walletBalance, pages, audiences } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const submit = useSubmit();
   const nav = useNavigation();
@@ -243,6 +299,11 @@ export default function CreateCampaign() {
   const [endDate, setEndDate] = useState("");
   const [adSetCount, setAdSetCount] = useState(1);
   const [creatives, setCreatives] = useState<CreativeForm[]>([{ ...EMPTY_CREATIVE }]);
+  const [targetingMode, setTargetingMode] = useState<"new" | "saved">("new");
+  const [audienceDbId, setAudienceDbId] = useState(audiences[0]?.id ?? "");
+  const [country, setCountry] = useState("US");
+  const [ageMin, setAgeMin] = useState("18");
+  const [ageMax, setAgeMax] = useState("65");
 
   const budgetNum = parseFloat(dailyBudget) || 0;
   const fee = calculatePublishFee(objective, adSetCount, creatives.length);
@@ -274,8 +335,15 @@ export default function CreateCampaign() {
     data.set("endDate", endDate);
     data.set("adSetCount", String(adSetCount));
     data.set("creatives", JSON.stringify(creatives));
+    data.set("targetingMode", targetingMode);
+    data.set("audienceDbId", audienceDbId);
+    data.set("country", country);
+    data.set("ageMin", ageMin);
+    data.set("ageMax", ageMax);
     submit(data, { method: "post" });
   };
+
+  const selectedAudience = audiences.find((a) => a.id === audienceDbId);
 
   return (
     <Page
@@ -417,6 +485,80 @@ export default function CreateCampaign() {
                   </Text>
                 </InlineStack>
               </BlockStack>
+              <BlockStack gap="200">
+                <Text as="h2" variant="headingSm">
+                  Audience
+                </Text>
+                <ChoiceList
+                  title="Targeting"
+                  choices={[
+                    { label: "New targeting — country & age", value: "new" },
+                    {
+                      label: `Saved audience${audiences.length === 0 ? " (none yet)" : ""}`,
+                      value: "saved",
+                    },
+                  ]}
+                  selected={[targetingMode]}
+                  onChange={(v) => setTargetingMode(v[0] as "new" | "saved")}
+                />
+                {targetingMode === "saved" && audiences.length > 0 && (
+                  <Select
+                    label="Saved audience"
+                    options={audiences.map((a) => ({
+                      label: `${a.name} (${a.type}${a.approxCount != null ? ` · ~${a.approxCount.toLocaleString()}` : ""})`,
+                      value: a.id,
+                    }))}
+                    value={audienceDbId}
+                    onChange={setAudienceDbId}
+                    helpText="No extra fee — the fee was charged when the audience was created."
+                  />
+                )}
+                {targetingMode === "saved" && audiences.length === 0 && (
+                  <Banner tone="info">
+                    No saved audiences yet.{" "}
+                    <Button plain url="/app/ads/audiences">
+                      Create one in Audience Manager
+                    </Button>
+                  </Banner>
+                )}
+                <Grid>
+                  <Grid.Cell columnSpan={{ xs: 4, sm: 2, md: 2, lg: 4, xl: 4 }}>
+                    <Select
+                      label="Country"
+                      options={[
+                        { label: "United States", value: "US" },
+                        { label: "United Kingdom", value: "GB" },
+                        { label: "Canada", value: "CA" },
+                        { label: "Australia", value: "AU" },
+                        { label: "Germany", value: "DE" },
+                        { label: "France", value: "FR" },
+                        { label: "India", value: "IN" },
+                        { label: "Bangladesh", value: "BD" },
+                      ]}
+                      value={country}
+                      onChange={setCountry}
+                    />
+                  </Grid.Cell>
+                  <Grid.Cell columnSpan={{ xs: 4, sm: 2, md: 2, lg: 4, xl: 4 }}>
+                    <TextField
+                      label="Min age"
+                      type="number"
+                      value={ageMin}
+                      onChange={setAgeMin}
+                      autoComplete="off"
+                    />
+                  </Grid.Cell>
+                  <Grid.Cell columnSpan={{ xs: 4, sm: 2, md: 2, lg: 4, xl: 4 }}>
+                    <TextField
+                      label="Max age"
+                      type="number"
+                      value={ageMax}
+                      onChange={setAgeMax}
+                      autoComplete="off"
+                    />
+                  </Grid.Cell>
+                </Grid>
+              </BlockStack>
               <InlineStack align="space-between">
                 <Button onClick={() => setStep(1)}>Back</Button>
                 <Button
@@ -546,6 +688,14 @@ export default function CreateCampaign() {
                 <InlineStack align="space-between">
                   <Text as="p" tone="subdued">Creatives</Text>
                   <Text as="p">{creatives.length}</Text>
+                </InlineStack>
+                <InlineStack align="space-between">
+                  <Text as="p" tone="subdued">Audience</Text>
+                  <Text as="p">
+                    {targetingMode === "saved" && selectedAudience
+                      ? `${selectedAudience.name} (${selectedAudience.type})`
+                      : `New targeting — ${country}, age ${ageMin}–${ageMax}`}
+                  </Text>
                 </InlineStack>
               </BlockStack>
 
