@@ -104,6 +104,9 @@ model Campaign {
   imageUrl       String?
   destinationUrl String?
   cta            String?  // call-to-action button type
+  adSetCount     Int      @default(1)
+  creativeCount  Int      @default(1)
+  publishFee     Float?   // total wallet fee charged at publish (USD)
   error          String?
   createdAt      DateTime @default(now())
 }

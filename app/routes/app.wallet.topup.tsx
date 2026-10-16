@@ -3,6 +3,7 @@ import { json, redirect } from "@remix-run/node";
 
 import { authenticate } from "../shopify.server";
 import { topup } from "../lib/wallet.server";
+import { TOPUP_PACKS } from "../lib/pricing";
 
 /**
  * POST /app/wallet/topup — creates a Shopify one-time ApplicationCharge,
@@ -10,7 +11,7 @@ import { topup } from "../lib/wallet.server";
  * GET /app/wallet/topup?charge_id=... — callback after approval: credits wallet.
  */
 
-const ALLOWED_AMOUNTS = [10, 25, 50, 100];
+const ALLOWED_AMOUNTS = TOPUP_PACKS.map((p) => p.price);
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session, admin } = await authenticate.admin(request);
@@ -38,8 +39,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const charge = data?.data?.node;
     if (charge?.status === "ACTIVE") {
       const amount = parseFloat(charge.price.amount);
-      if (ALLOWED_AMOUNTS.includes(Math.round(amount))) {
-        await topup(shop, amount, `Wallet topup via Shopify — ${charge.name}`, chargeId);
+      const pack = TOPUP_PACKS.find((p) => p.price === Math.round(amount));
+      if (pack) {
+        const bonus = pack.credit - pack.price;
+        await topup(
+          shop,
+          pack.price,
+          `Wallet topup via Shopify — ${charge.name}`,
+          chargeId,
+          bonus,
+        );
       }
       return redirect("/app/wallet?topped=1");
     }

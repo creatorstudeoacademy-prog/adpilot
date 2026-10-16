@@ -208,60 +208,87 @@ export async function createAd(
 }
 
 /** Publish a full campaign (campaign + ad set + creative + ad), then activate. */
-export async function publishFullCampaign(input: {
-  adAccountId: string;
-  accessToken: string;
-  pageId: string;
-  name: string;
-  objective: string;
-  dailyBudget: number;
-  startDate?: Date | null;
-  endDate?: Date | null;
+export interface PublishCreativeInput {
   headline: string;
   primaryText: string;
   description?: string;
   imageUrl: string;
   destinationUrl: string;
   cta?: string;
-}): Promise<{ campaignId: string; adSetId: string; adId: string }> {
+}
+
+export interface PublishAdSetInput {
+  name: string;
+  dailyBudget: number;
+  startDate?: Date | null;
+  endDate?: Date | null;
+}
+
+/** Publish a full campaign: 1 campaign + N ad sets + M creatives per ad set, then activate. */
+export async function publishFullCampaign(input: {
+  adAccountId: string;
+  accessToken: string;
+  pageId: string;
+  name: string;
+  objective: string;
+  adSets: PublishAdSetInput[];
+  creatives: PublishCreativeInput[];
+}): Promise<{ campaignId: string; adSetIds: string[]; adIds: string[] }> {
+  if (input.adSets.length === 0) throw new Error("At least one ad set is required.");
+  if (input.creatives.length === 0) throw new Error("At least one creative is required.");
+
   const campaignId = await createCampaign(
     input.adAccountId,
     input.accessToken,
     input.name,
     input.objective,
   );
-  const adSetId = await createAdSet(
-    input.adAccountId,
-    input.accessToken,
-    campaignId,
-    `${input.name} - Ad Set`,
-    input.dailyBudget,
-    input.startDate,
-    input.endDate,
-  );
-  const creativeId = await createAdCreative(input.adAccountId, input.accessToken, `${input.name} - Creative`, {
-    imageUrl: input.imageUrl,
-    headline: input.headline,
-    primaryText: input.primaryText,
-    description: input.description,
-    destinationUrl: input.destinationUrl,
-    cta: input.cta,
-    pageId: input.pageId,
-  });
-  const adId = await createAd(
-    input.adAccountId,
-    input.accessToken,
-    `${input.name} - Ad`,
-    adSetId,
-    creativeId,
-  );
 
-  // Activate everything now that the ad is fully built.
+  const adSetIds: string[] = [];
+  const adIds: string[] = [];
+
+  for (let i = 0; i < input.adSets.length; i++) {
+    const adSet = input.adSets[i];
+    const adSetId = await createAdSet(
+      input.adAccountId,
+      input.accessToken,
+      campaignId,
+      adSet.name,
+      adSet.dailyBudget,
+      adSet.startDate,
+      adSet.endDate,
+    );
+    adSetIds.push(adSetId);
+
+    for (let j = 0; j < input.creatives.length; j++) {
+      const creative = input.creatives[j];
+      const creativeId = await createAdCreative(
+        input.adAccountId,
+        input.accessToken,
+        `${input.name} - Creative ${j + 1}`,
+        { ...creative, pageId: input.pageId },
+      );
+      const adId = await createAd(
+        input.adAccountId,
+        input.accessToken,
+        `${input.name} - Ad ${i + 1}.${j + 1}`,
+        adSetId,
+        creativeId,
+      );
+      adIds.push(adId);
+    }
+  }
+
+  // Activate everything now that the ads are fully built.
   await marketingFetch(`/${campaignId}`, input.accessToken, { status: "ACTIVE" });
-  await marketingFetch(`/${adSetId}`, input.accessToken, { status: "ACTIVE" });
-  await marketingFetch(`/${adId}`, input.accessToken, { status: "ACTIVE" });
+  for (const adSetId of adSetIds) {
+    await marketingFetch(`/${adSetId}`, input.accessToken, { status: "ACTIVE" });
+  }
+  for (const adId of adIds) {
+    await marketingFetch(`/${adId}`, input.accessToken, { status: "ACTIVE" });
+  }
 
-  return { campaignId, adSetId, adId };
+  return { campaignId, adSetIds, adIds };
 }
 
 /** Fetch campaigns with basic insights. */

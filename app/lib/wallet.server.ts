@@ -5,6 +5,9 @@
  */
 
 import prisma from "../db.server";
+import { OBJECTIVE_FEES } from "./pricing";
+
+export { OBJECTIVE_FEES };
 
 export async function getWallet(shop: string) {
   let wallet = await prisma.wallet.findUnique({ where: { shop } });
@@ -15,20 +18,31 @@ export async function getWallet(shop: string) {
 }
 
 /** Credit the wallet (after a successful Shopify one-time charge). */
-export async function topup(shop: string, amount: number, description?: string, metaRef?: string) {
+export async function topup(
+  shop: string,
+  amount: number,
+  description?: string,
+  metaRef?: string,
+  bonus: number = 0,
+) {
   if (amount <= 0) throw new Error("Topup amount must be positive.");
+  const total = amount + bonus;
   const wallet = await getWallet(shop);
   const updated = await prisma.wallet.update({
     where: { id: wallet.id },
-    data: { balance: { increment: amount } },
+    data: { balance: { increment: total } },
   });
   await prisma.walletTransaction.create({
     data: {
       shop,
       walletId: wallet.id,
-      amount,
+      amount: total,
       type: "topup",
-      description: description ?? `Wallet topup $${amount.toFixed(2)}`,
+      description:
+        description ??
+        (bonus > 0
+          ? `Wallet topup $${amount.toFixed(2)} + $${bonus.toFixed(2)} bonus`
+          : `Wallet topup $${amount.toFixed(2)}`),
       metaRef,
     },
   });

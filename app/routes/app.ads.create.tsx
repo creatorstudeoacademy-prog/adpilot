@@ -27,6 +27,11 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { OBJECTIVES, publishFullCampaign } from "../lib/meta-ads.server";
 import { deduct, getWallet, refund } from "../lib/wallet.server";
+import {
+  OBJECTIVE_FEES,
+  OBJECTIVE_FEE_LABELS,
+  calculatePublishFee,
+} from "../lib/pricing";
 
 const CTA_OPTIONS = [
   { label: "Shop Now", value: "SHOP_NOW" },
@@ -74,16 +79,46 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const dailyBudget = parseFloat(String(form.get("dailyBudget") ?? "0"));
   const startDateStr = String(form.get("startDate") ?? "");
   const endDateStr = String(form.get("endDate") ?? "");
-  const headline = String(form.get("headline") ?? "").trim();
-  const primaryText = String(form.get("primaryText") ?? "").trim();
-  const description = String(form.get("description") ?? "").trim();
-  const imageUrl = String(form.get("imageUrl") ?? "").trim();
-  const destinationUrl = String(form.get("destinationUrl") ?? "").trim();
-  const cta = String(form.get("cta") ?? "");
+  const adSetCount = Math.min(5, Math.max(1, parseInt(String(form.get("adSetCount") ?? "1"), 10) || 1));
 
-  if (!name || !dailyBudget || dailyBudget <= 0 || !headline || !primaryText || !imageUrl || !destinationUrl) {
-    return json({ ok: false, error: "Fill in all required fields." });
+  let creatives: Array<{
+    headline: string;
+    primaryText: string;
+    description: string;
+    imageUrl: string;
+    destinationUrl: string;
+    cta: string;
+  }> = [];
+  try {
+    creatives = JSON.parse(String(form.get("creatives") ?? "[]"));
+  } catch {
+    creatives = [];
   }
+  creatives = creatives
+    .slice(0, 5)
+    .map((c) => ({
+      headline: String(c.headline ?? "").trim(),
+      primaryText: String(c.primaryText ?? "").trim(),
+      description: String(c.description ?? "").trim(),
+      imageUrl: String(c.imageUrl ?? "").trim(),
+      destinationUrl: String(c.destinationUrl ?? "").trim(),
+      cta: String(c.cta ?? "SHOP_NOW"),
+    }));
+
+  if (!name || !dailyBudget || dailyBudget <= 0) {
+    return json({ ok: false, error: "Fill in the campaign name and a valid daily budget." });
+  }
+  if (creatives.length === 0) {
+    return json({ ok: false, error: "Add at least one creative." });
+  }
+  const badCreative = creatives.find(
+    (c) => !c.headline || !c.primaryText || !c.imageUrl || !c.destinationUrl,
+  );
+  if (badCreative) {
+    return json({ ok: false, error: "Every creative needs a headline, primary text, image URL and destination URL." });
+  }
+
+  const fee = calculatePublishFee(objective, adSetCount, creatives.length);
 
   const adAccount = await prisma.adAccount.findFirst({
     where: { id: adAccountDbId, shop },
@@ -96,12 +131,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (!page) return json({ ok: false, error: "Connect a Facebook Page first." });
 
   // Wallet check happens before touching Meta.
+  // Fee = base by objective + $1.50 per extra ad set + $1 per extra creative.
+  // The ad budget itself is billed by Meta directly to the user's ad account.
   const wallet = await getWallet(shop);
-  if (wallet.balance < dailyBudget) {
-    return redirect("/app/wallet?need=" + dailyBudget.toFixed(2));
+  if (wallet.balance < fee.total) {
+    return redirect("/app/wallet?need=" + fee.total.toFixed(2));
   }
 
   // Create draft record first.
+  const firstCreative = creatives[0];
   const campaign = await prisma.campaign.create({
     data: {
       shop,
@@ -112,17 +150,25 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       dailyBudget,
       startDate: startDateStr ? new Date(startDateStr) : null,
       endDate: endDateStr ? new Date(endDateStr) : null,
-      headline,
-      primaryText,
-      description,
-      imageUrl,
-      destinationUrl,
-      cta,
+      headline: firstCreative.headline,
+      primaryText: firstCreative.primaryText,
+      description: firstCreative.description,
+      imageUrl: firstCreative.imageUrl,
+      destinationUrl: firstCreative.destinationUrl,
+      cta: firstCreative.cta,
+      adSetCount,
+      creativeCount: creatives.length,
+      publishFee: fee.total,
     },
   });
 
-  // Deduct from wallet BEFORE calling Meta.
-  await deduct(shop, dailyBudget, `Ad spend: ${name}`, campaign.id);
+  // Deduct the publish fee from the wallet BEFORE calling Meta.
+  await deduct(
+    shop,
+    fee.total,
+    `Ad publish fee (${fee.objectiveLabel}): ${name} — ${adSetCount} ad set(s), ${creatives.length} creative(s)`,
+    campaign.id,
+  );
 
   try {
     const result = await publishFullCampaign({
@@ -131,15 +177,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       pageId: page.pageId,
       name,
       objective,
-      dailyBudget,
-      startDate: startDateStr ? new Date(startDateStr) : null,
-      endDate: endDateStr ? new Date(endDateStr) : null,
-      headline,
-      primaryText,
-      description,
-      imageUrl,
-      destinationUrl,
-      cta,
+      adSets: Array.from({ length: adSetCount }, (_, i) => ({
+        name: adSetCount > 1 ? `${name} - Ad Set ${i + 1}` : `${name} - Ad Set`,
+        dailyBudget,
+        startDate: startDateStr ? new Date(startDateStr) : null,
+        endDate: endDateStr ? new Date(endDateStr) : null,
+      })),
+      creatives,
     });
 
     await prisma.campaign.update({
@@ -147,8 +191,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       data: {
         status: "active",
         metaCampaignId: result.campaignId,
-        metaAdSetId: result.adSetId,
-        metaAdId: result.adId,
+        metaAdSetId: JSON.stringify(result.adSetIds),
+        metaAdId: JSON.stringify(result.adIds),
       },
     });
 
@@ -156,13 +200,31 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   } catch (e) {
     const message = e instanceof Error ? e.message : "Meta publish failed.";
     // Refund the wallet since Meta failed.
-    await refund(shop, dailyBudget, `Refund: Meta publish failed for ${name}`, campaign.id);
+    await refund(shop, fee.total, `Refund: Meta publish failed for ${name}`, campaign.id);
     await prisma.campaign.update({
       where: { id: campaign.id },
       data: { status: "failed", error: message },
     });
     return json({ ok: false, error: message });
   }
+};
+
+interface CreativeForm {
+  headline: string;
+  primaryText: string;
+  description: string;
+  imageUrl: string;
+  destinationUrl: string;
+  cta: string;
+}
+
+const EMPTY_CREATIVE: CreativeForm = {
+  headline: "",
+  primaryText: "",
+  description: "",
+  imageUrl: "",
+  destinationUrl: "",
+  cta: "SHOP_NOW",
 };
 
 export default function CreateCampaign() {
@@ -179,15 +241,28 @@ export default function CreateCampaign() {
   const [dailyBudget, setDailyBudget] = useState("10");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [headline, setHeadline] = useState("");
-  const [primaryText, setPrimaryText] = useState("");
-  const [description, setDescription] = useState("");
-  const [imageUrl, setImageUrl] = useState("");
-  const [destinationUrl, setDestinationUrl] = useState("");
-  const [cta, setCta] = useState("SHOP_NOW");
+  const [adSetCount, setAdSetCount] = useState(1);
+  const [creatives, setCreatives] = useState<CreativeForm[]>([{ ...EMPTY_CREATIVE }]);
 
   const budgetNum = parseFloat(dailyBudget) || 0;
-  const insufficient = budgetNum > walletBalance;
+  const fee = calculatePublishFee(objective, adSetCount, creatives.length);
+  const insufficient = fee.total > walletBalance;
+
+  const updateCreative = (index: number, patch: Partial<CreativeForm>) => {
+    setCreatives((prev) => prev.map((c, i) => (i === index ? { ...c, ...patch } : c)));
+  };
+
+  const addCreative = () => {
+    if (creatives.length < 5) setCreatives((prev) => [...prev, { ...EMPTY_CREATIVE }]);
+  };
+
+  const removeCreative = (index: number) => {
+    if (creatives.length > 1) setCreatives((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const creativesValid = creatives.every(
+    (c) => c.headline.trim() && c.primaryText.trim() && c.imageUrl.trim() && c.destinationUrl.trim(),
+  );
 
   const publish = () => {
     const data = new FormData();
@@ -197,12 +272,8 @@ export default function CreateCampaign() {
     data.set("dailyBudget", dailyBudget);
     data.set("startDate", startDate);
     data.set("endDate", endDate);
-    data.set("headline", headline);
-    data.set("primaryText", primaryText);
-    data.set("description", description);
-    data.set("imageUrl", imageUrl);
-    data.set("destinationUrl", destinationUrl);
-    data.set("cta", cta);
+    data.set("adSetCount", String(adSetCount));
+    data.set("creatives", JSON.stringify(creatives));
     submit(data, { method: "post" });
   };
 
@@ -218,8 +289,8 @@ export default function CreateCampaign() {
         )}
         {insufficient && step === 4 && (
           <Banner tone="warning">
-            Wallet balance (${walletBalance.toFixed(2)}) is below the daily
-            budget (${budgetNum.toFixed(2)}). You will be asked to top up
+            Wallet balance (${walletBalance.toFixed(2)}) is below the $
+            {fee.total.toFixed(2)} publish fee. You will be asked to top up
             before publishing.
           </Banner>
         )}
@@ -252,6 +323,9 @@ export default function CreateCampaign() {
                         </Text>
                         <Text as="p" variant="bodyMd" tone="subdued">
                           {o.description}
+                        </Text>
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          Publish fee: ${OBJECTIVE_FEES[o.id].toFixed(2)} per ad
                         </Text>
                       </BlockStack>
                     </div>
@@ -318,6 +392,31 @@ export default function CreateCampaign() {
                   />
                 </Grid.Cell>
               </Grid>
+              <BlockStack gap="200">
+                <Text as="p" variant="bodyMd">
+                  Number of ad sets
+                </Text>
+                <InlineStack gap="200" blockAlign="center">
+                  <Button
+                    disabled={adSetCount <= 1}
+                    onClick={() => setAdSetCount((c) => Math.max(1, c - 1))}
+                  >
+                    −
+                  </Button>
+                  <Text as="p" variant="headingMd">
+                    {adSetCount}
+                  </Text>
+                  <Button
+                    disabled={adSetCount >= 5}
+                    onClick={() => setAdSetCount((c) => Math.min(5, c + 1))}
+                  >
+                    +
+                  </Button>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    +$1.50 per extra ad set
+                  </Text>
+                </InlineStack>
+              </BlockStack>
               <InlineStack align="space-between">
                 <Button onClick={() => setStep(1)}>Back</Button>
                 <Button
@@ -333,70 +432,92 @@ export default function CreateCampaign() {
         )}
 
         {step === 3 && (
-          <Card>
-            <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">
-                Ad creative
-              </Text>
-              <TextField
-                label="Headline"
-                value={headline}
-                onChange={setHeadline}
-                placeholder="50% Off Summer Collection"
-                autoComplete="off"
-              />
-              <TextField
-                label="Primary text"
-                value={primaryText}
-                onChange={setPrimaryText}
-                multiline={4}
-                placeholder="Tell people what makes your offer great..."
-                autoComplete="off"
-              />
-              <TextField
-                label="Description (optional)"
-                value={description}
-                onChange={setDescription}
-                autoComplete="off"
-              />
-              <TextField
-                label="Image URL"
-                value={imageUrl}
-                onChange={setImageUrl}
-                placeholder="https://..."
-                autoComplete="off"
-                helpText="A direct link to your ad image (JPG/PNG)."
-              />
-              <TextField
-                label="Destination URL"
-                value={destinationUrl}
-                onChange={setDestinationUrl}
-                placeholder="https://yourstore.com/products/..."
-                autoComplete="off"
-              />
-              <Select
-                label="Call-to-action button"
-                options={CTA_OPTIONS}
-                value={cta}
-                onChange={setCta}
-              />
-              <InlineStack align="space-between">
-                <Button onClick={() => setStep(2)}>Back</Button>
-                <Button
-                  variant="primary"
-                  onClick={() => setStep(4)}
-                  disabled={
-                    !headline.trim() ||
-                    !primaryText.trim() ||
-                    !imageUrl.trim() ||
-                    !destinationUrl.trim()
-                  }
-                >
-                  Review
-                </Button>
-              </InlineStack>
-            </BlockStack>
-          </Card>
+          <BlockStack gap="400">
+            {creatives.map((creative, index) => (
+              <Card key={index}>
+                <BlockStack gap="400">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <Text as="h2" variant="headingMd">
+                      Creative {index + 1}
+                      {index > 0 && (
+                        <Text as="span" variant="bodySm" tone="subdued">
+                          {" "}(+$1.00)
+                        </Text>
+                      )}
+                    </Text>
+                    {creatives.length > 1 && (
+                      <Button
+                        variant="plain"
+                        tone="critical"
+                        onClick={() => removeCreative(index)}
+                      >
+                        Remove
+                      </Button>
+                    )}
+                  </InlineStack>
+                  <TextField
+                    label="Headline"
+                    value={creative.headline}
+                    onChange={(v) => updateCreative(index, { headline: v })}
+                    placeholder="50% Off Summer Collection"
+                    autoComplete="off"
+                  />
+                  <TextField
+                    label="Primary text"
+                    value={creative.primaryText}
+                    onChange={(v) => updateCreative(index, { primaryText: v })}
+                    multiline={4}
+                    placeholder="Tell people what makes your offer great..."
+                    autoComplete="off"
+                  />
+                  <TextField
+                    label="Description (optional)"
+                    value={creative.description}
+                    onChange={(v) => updateCreative(index, { description: v })}
+                    autoComplete="off"
+                  />
+                  <TextField
+                    label="Image URL"
+                    value={creative.imageUrl}
+                    onChange={(v) => updateCreative(index, { imageUrl: v })}
+                    placeholder="https://..."
+                    autoComplete="off"
+                    helpText="A direct link to your ad image (JPG/PNG)."
+                  />
+                  <TextField
+                    label="Destination URL"
+                    value={creative.destinationUrl}
+                    onChange={(v) => updateCreative(index, { destinationUrl: v })}
+                    placeholder="https://yourstore.com/products/..."
+                    autoComplete="off"
+                  />
+                  <Select
+                    label="Call-to-action button"
+                    options={CTA_OPTIONS}
+                    value={creative.cta}
+                    onChange={(v) => updateCreative(index, { cta: v })}
+                  />
+                </BlockStack>
+              </Card>
+            ))}
+
+            {creatives.length < 5 && (
+              <Button onClick={addCreative}>
+                + Add another creative (+$1.00)
+              </Button>
+            )}
+
+            <InlineStack align="space-between">
+              <Button onClick={() => setStep(2)}>Back</Button>
+              <Button
+                variant="primary"
+                onClick={() => setStep(4)}
+                disabled={!creativesValid}
+              >
+                Review
+              </Button>
+            </InlineStack>
+          </BlockStack>
         )}
 
         {step === 4 && (
@@ -419,18 +540,65 @@ export default function CreateCampaign() {
                   <Text as="p">${budgetNum.toFixed(2)}</Text>
                 </InlineStack>
                 <InlineStack align="space-between">
-                  <Text as="p" tone="subdued">Headline</Text>
-                  <Text as="p">{headline}</Text>
+                  <Text as="p" tone="subdued">Ad sets</Text>
+                  <Text as="p">{adSetCount}</Text>
+                </InlineStack>
+                <InlineStack align="space-between">
+                  <Text as="p" tone="subdued">Creatives</Text>
+                  <Text as="p">{creatives.length}</Text>
+                </InlineStack>
+              </BlockStack>
+
+              <BlockStack gap="200">
+                <Text as="h2" variant="headingSm">
+                  Publishing fee breakdown
+                </Text>
+                <InlineStack align="space-between">
+                  <Text as="p" tone="subdued">
+                    Base ({fee.objectiveLabel})
+                  </Text>
+                  <Text as="p">${fee.base.toFixed(2)}</Text>
+                </InlineStack>
+                {fee.extraAdSetCount > 0 && (
+                  <InlineStack align="space-between">
+                    <Text as="p" tone="subdued">
+                      Extra ad sets ({fee.extraAdSetCount})
+                    </Text>
+                    <Text as="p">${fee.extraAdSets.toFixed(2)}</Text>
+                  </InlineStack>
+                )}
+                {fee.extraCreativeCount > 0 && (
+                  <InlineStack align="space-between">
+                    <Text as="p" tone="subdued">
+                      Extra creatives ({fee.extraCreativeCount})
+                    </Text>
+                    <Text as="p">${fee.extraCreatives.toFixed(2)}</Text>
+                  </InlineStack>
+                )}
+                <InlineStack align="space-between">
+                  <Text as="p" variant="headingSm">
+                    Total
+                  </Text>
+                  <Text as="p" variant="headingSm">
+                    ${fee.total.toFixed(2)}
+                  </Text>
                 </InlineStack>
                 <InlineStack align="space-between">
                   <Text as="p" tone="subdued">Wallet balance after</Text>
-                  <Text as="p">${(walletBalance - budgetNum).toFixed(2)}</Text>
+                  <Text as="p">${(walletBalance - fee.total).toFixed(2)}</Text>
                 </InlineStack>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  The daily budget is billed separately by Meta to your ad
+                  account.
+                </Text>
               </BlockStack>
+
               <InlineStack align="space-between">
                 <Button onClick={() => setStep(3)}>Back</Button>
                 <Button variant="primary" loading={busy} onClick={publish}>
-                  {insufficient ? "Top up & publish" : "Publish campaign"}
+                  {insufficient
+                    ? "Top up & publish"
+                    : `Publish campaign ($${fee.total.toFixed(2)})`}
                 </Button>
               </InlineStack>
             </BlockStack>

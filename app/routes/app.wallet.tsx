@@ -15,8 +15,7 @@ import {
 
 import { authenticate } from "../shopify.server";
 import { getTransactions, getWallet } from "../lib/wallet.server";
-
-const TOPUP_AMOUNTS = [10, 25, 50, 100];
+import { TOPUP_PACKS } from "../lib/pricing";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -90,9 +89,11 @@ export default function WalletPage() {
                   ${balance.toFixed(2)}
                 </Text>
                 <Text as="p" variant="bodySm" tone="subdued">
-                  Ad spend is deducted from this balance before Meta publishes
-                  your campaign. If publishing fails, you are refunded
-                  automatically.
+                  Publishing fees are deducted per ad: $2 Awareness, $2.50
+                  Traffic/Engagement, $3 Sales — plus $1.50 per extra ad set
+                  and $1 per extra creative. Your ad budget is billed
+                  separately by Meta to your ad account. If publishing
+                  fails, you are refunded automatically.
                 </Text>
               </BlockStack>
             </Card>
@@ -108,15 +109,18 @@ export default function WalletPage() {
                   instantly.
                 </Text>
                 <Grid>
-                  {TOPUP_AMOUNTS.map((amt) => (
-                    <Grid.Cell key={String(amt)} columnSpan={{ xs: 3, sm: 3, md: 3, lg: 3, xl: 3 }}>
+                  {TOPUP_PACKS.map((pack) => (
+                    <Grid.Cell key={String(pack.price)} columnSpan={{ xs: 6, sm: 2, md: 2, lg: 4, xl: 4 }}>
                       <Button
                         fullWidth
                         disabled={busy}
-                        onClick={() => topup(amt)}
+                        onClick={() => topup(pack.price)}
                       >
-                        ${amt}
+                        {pack.label}
                       </Button>
+                      <Text as="p" variant="bodySm" tone="subdued" alignment="center">
+                        {pack.sublabel}
+                      </Text>
                     </Grid.Cell>
                   ))}
                 </Grid>
