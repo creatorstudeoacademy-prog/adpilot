@@ -47,12 +47,15 @@ type ClientAgent = Omit<AgentRow, "activeFrom" | "expiresAt" | "createdAt"> & {
   activeFrom: string | null;
   expiresAt: string | null;
   createdAt: string;
+  /** scheduled | active | expiring_soon | expired — computed server-side. */
+  status: string;
 };
 
 /**
- * GET /app/admin — owner-only AI activity report.
+ * GET /app/admin — owner-only AI CONTROL panel.
  * Visible ONLY when the shop matches ADMIN_SHOP_DOMAIN env var.
- * Shows what the AI did, how many merchants used it, and revenue earned.
+ * Manage AI providers and agents here. Work-output statistics are
+ * intentionally NOT shown on this page (control only).
  */
 
 // Minimal typed access to ActivityLog (client regenerates at Docker build).
@@ -74,31 +77,6 @@ interface ActivityLogDelegate {
 }
 function activityLog(): ActivityLogDelegate | undefined {
   return (prisma as unknown as { activityLog?: ActivityLogDelegate }).activityLog;
-}
-
-const ACTIONS = [
-  "ai_generate",
-  "post_publish",
-  "post_schedule",
-  "ad_publish",
-  "audience_create",
-  "wallet_topup",
-] as const;
-
-const ACTION_LABELS: Record<string, string> = {
-  ai_generate: "AI generations",
-  post_publish: "Posts published",
-  post_schedule: "Posts scheduled",
-  ad_publish: "Ads published",
-  audience_create: "Audiences created",
-  wallet_topup: "Wallet top-ups",
-};
-
-interface PeriodStats {
-  label: string;
-  counts: Record<string, number>;
-  merchants: number;
-  revenue: number;
 }
 
 interface ProviderInfo {
@@ -143,25 +121,6 @@ const AI_SKILLS: AiSkill[] = [
   },
 ];
 
-function summarize(rows: ActivityRow[], since: Date): PeriodStats {
-  const inPeriod = rows.filter((r) => r.createdAt >= since);
-  const counts: Record<string, number> = {};
-  for (const a of ACTIONS) counts[a] = 0;
-  const shops = new Set<string>();
-  let revenue = 0;
-  for (const r of inPeriod) {
-    if (r.action in counts) counts[r.action] += 1;
-    shops.add(r.shop);
-    revenue += r.feeCharged ?? 0;
-  }
-  return {
-    label: "",
-    counts,
-    merchants: shops.size,
-    revenue: Math.round(revenue * 100) / 100,
-  };
-}
-
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const adminShop = (process.env.ADMIN_SHOP_DOMAIN ?? "").trim();
@@ -170,9 +129,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   const now = new Date();
-  const day = new Date(now);
-  day.setHours(0, 0, 0, 0);
-  const week = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const month = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
   const delegate = activityLog();
@@ -183,10 +139,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         take: 5000,
       })
     : [];
-
-  const today = { ...summarize(rows, day), label: "Today" };
-  const last7 = { ...summarize(rows, week), label: "Last 7 days" };
-  const last30 = { ...summarize(rows, month), label: "Last 30 days" };
 
   // ── AI providers (keys NEVER leave the server) ──
   // DB providers added in this panel (sortOrder asc) first, then Railway
@@ -243,14 +195,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
 
-  const recent = rows.slice(0, 25).map((r) => [
-    r.createdAt.toISOString().slice(0, 16).replace("T", " "),
-    r.shop,
-    ACTION_LABELS[r.action] ?? r.action,
-    r.detail ? r.detail.slice(0, 70) : "—",
-    `$${(r.feeCharged ?? 0).toFixed(2)}`,
-  ]);
-
   const agents = await listAgents();
   const providerNames = await listProvidersAsync();
   // Serialize Dates for the client (useLoaderData JSON).
@@ -259,74 +203,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     activeFrom: a.activeFrom ? a.activeFrom.toISOString() : null,
     expiresAt: a.expiresAt ? a.expiresAt.toISOString() : null,
     createdAt: a.createdAt.toISOString(),
+    status: getAgentStatus(a),
   }));
 
-  // ── Agent workload (per agent, from ActivityLog agentName) ──
-  interface AgentWorkload {
-    id: string;
-    name: string;
-    isMainAgent: boolean;
-    enabled: boolean;
-    sectors: string;
-    activeFrom: string | null;
-    expiresAt: string | null;
-    status: string;
-    today: number;
-    last30d: number;
-    success: number;
-    failed: number;
-    lastUsed: string | null;
-  }
-  const workload: AgentWorkload[] = agents.map((a) => {
-    const mine = rows.filter((r) => r.agentName === a.name);
-    const isFailed = (r: ActivityRow) => (r.detail ?? "").startsWith("failed:");
-    const last = mine.length > 0 ? mine[0].createdAt : null; // rows are desc
-    return {
-      id: a.id,
-      name: a.name,
-      isMainAgent: a.isMainAgent,
-      enabled: a.enabled,
-      sectors: a.isMainAgent ? "all (main)" : a.sectors,
-      activeFrom: a.activeFrom ? a.activeFrom.toISOString().slice(0, 10) : null,
-      expiresAt: a.expiresAt ? a.expiresAt.toISOString().slice(0, 10) : null,
-      status: getAgentStatus(a),
-      today: mine.filter((r) => r.createdAt >= day).length,
-      last30d: mine.length,
-      success: mine.filter((r) => !isFailed(r)).length,
-      failed: mine.filter(isFailed).length,
-      lastUsed: last ? last.toISOString().slice(0, 16).replace("T", " ") : null,
-    };
-  });
-
-  // ── App × agent matrix (forward-looking for the AI Hub; one row today) ──
-  interface AppAgentRow {
-    app: string;
-    agents: string;
-    tasks30d: number;
-    revenue30d: number;
-  }
-  const appAgentMatrix: AppAgentRow[] = (() => {
-    const byApp = new Map<string, { agents: Set<string>; tasks: number; revenue: number }>();
-    for (const r of rows) {
-      const app = r.app || "adpilot";
-      let e = byApp.get(app);
-      if (!e) {
-        e = { agents: new Set(), tasks: 0, revenue: 0 };
-        byApp.set(app, e);
-      }
-      if (r.agentName) e.agents.add(r.agentName);
-      e.tasks += 1;
-      e.revenue += r.feeCharged ?? 0;
-    }
-    return [...byApp.entries()].map(([app, e]) => ({
-      app,
-      agents: [...e.agents].join(", ") || "—",
-      tasks30d: e.tasks,
-      revenue30d: Math.round(e.revenue * 100) / 100,
-    }));
-  })();
-
-  return json({ today, last7, last30, recent, providers, aiFailures, skills: AI_SKILLS, agents: agentsJson, providerNames, workload, appAgentMatrix });
+  return json({ providers, aiFailures, skills: AI_SKILLS, agents: agentsJson, providerNames });
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -414,52 +294,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
   return redirect("/app/admin");
 };
-
-function StatCard({ title, value }: { title: string; value: string }) {
-  return (
-    <Card>
-      <BlockStack gap="100">
-        <Text as="p" variant="bodySm" tone="subdued">
-          {title}
-        </Text>
-        <Text as="p" variant="headingLg">
-          {value}
-        </Text>
-      </BlockStack>
-    </Card>
-  );
-}
-
-function PeriodSection({ stats }: { stats: PeriodStats }) {
-  return (
-    <Card>
-      <BlockStack gap="400">
-        <Text as="h2" variant="headingMd">
-          {stats.label}
-        </Text>
-        <Grid>
-          <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 4, xl: 4 }}>
-            <StatCard title="Active merchants" value={String(stats.merchants)} />
-          </Grid.Cell>
-          <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 4, xl: 4 }}>
-            <StatCard title="Revenue" value={`$${stats.revenue.toFixed(2)}`} />
-          </Grid.Cell>
-          <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 4, xl: 4 }}>
-            <StatCard
-              title="AI generations"
-              value={String(stats.counts.ai_generate ?? 0)}
-            />
-          </Grid.Cell>
-        </Grid>
-        <DataTable
-          columnContentTypes={["text", "numeric"]}
-          headings={["Action", "Count"]}
-          rows={ACTIONS.map((a) => [ACTION_LABELS[a], String(stats.counts[a] ?? 0)])}
-        />
-      </BlockStack>
-    </Card>
-  );
-}
 
 function AgentUpload({ agentId, fileName }: { agentId: string; fileName: string | null }) {
   const fetcher = useFetcher<{ ok: boolean; error?: string; message?: string; chars?: number; fileName?: string }>();
@@ -827,28 +661,10 @@ function AgentsSection({
   agents,
   providerNames,
   actionError,
-  workload,
-  appAgentMatrix,
 }: {
   agents: ClientAgent[];
   providerNames: string[];
   actionError?: string;
-  workload: Array<{
-    id: string;
-    name: string;
-    isMainAgent: boolean;
-    enabled: boolean;
-    sectors: string;
-    activeFrom: string | null;
-    expiresAt: string | null;
-    status: string;
-    today: number;
-    last30d: number;
-    success: number;
-    failed: number;
-    lastUsed: string | null;
-  }>;
-  appAgentMatrix: Array<{ app: string; agents: string; tasks30d: number; revenue30d: number }>;
 }) {
   const [sectors, setSectors] = useState<string[]>(["all"]);
   const [priority, setPriority] = useState("0");
@@ -989,24 +805,24 @@ function AgentsSection({
                 "Rules PDF",
                 "",
               ]}
-              rows={workload.map((w) => [
-                w.isMainAgent ? `⭐ ${w.name}` : w.name,
-                agents.find((a) => a.id === w.id)?.providerName ?? "—",
-                w.sectors,
-                String(agents.find((a) => a.id === w.id)?.priority ?? 0),
-                <Text as="span" variant="bodySm" tone={statusTone(w.status)}>
-                  {w.status.replace("_", " ")}{w.enabled ? "" : " (disabled)"}
+              rows={agents.map((a) => [
+                a.isMainAgent ? `⭐ ${a.name}` : a.name,
+                a.providerName ?? "—",
+                a.isMainAgent ? "all (main)" : a.sectors,
+                String(a.priority ?? 0),
+                <Text as="span" variant="bodySm" tone={statusTone(a.status)}>
+                  {a.status.replace("_", " ")}{a.enabled ? "" : " (disabled)"}
                 </Text>,
-                w.activeFrom ?? "—",
-                w.expiresAt ?? "—",
+                a.activeFrom ? a.activeFrom.slice(0, 10) : "—",
+                a.expiresAt ? a.expiresAt.slice(0, 10) : "—",
                 <AgentUpload
-                  key={`up-${w.id}`}
-                  agentId={w.id}
-                  fileName={agents.find((a) => a.id === w.id)?.rulesFileName ?? null}
+                  key={`up-${a.id}`}
+                  agentId={a.id}
+                  fileName={a.rulesFileName ?? null}
                 />,
-                <Form key={`del-${w.id}`} method="post">
+                <Form key={`del-${a.id}`} method="post">
                   <input type="hidden" name="intent" value="delete-agent" />
-                  <input type="hidden" name="agentId" value={w.id} />
+                  <input type="hidden" name="agentId" value={a.id} />
                   <Button submit tone="critical" size="slim">
                     Delete
                   </Button>
@@ -1015,68 +831,20 @@ function AgentsSection({
             />
           )}
         </BlockStack>
-
-        <BlockStack gap="200">
-          <Text as="h3" variant="headingSm">
-            Agent workload (last 30 days)
-          </Text>
-          {workload.length === 0 ? (
-            <Text as="p" variant="bodySm" tone="subdued">
-              No agents to report on yet.
-            </Text>
-          ) : (
-            <DataTable
-              columnContentTypes={["text", "numeric", "numeric", "numeric", "numeric", "text"]}
-              headings={["Agent", "Today", "30 days", "Success", "Failed", "Last used (UTC)"]}
-              rows={workload.map((w) => [
-                w.isMainAgent ? `⭐ ${w.name}` : w.name,
-                String(w.today),
-                String(w.last30d),
-                String(w.success),
-                String(w.failed),
-                w.lastUsed ?? "—",
-              ])}
-            />
-          )}
-        </BlockStack>
-
-        <BlockStack gap="200">
-          <Text as="h3" variant="headingSm">
-            App × agent breakdown
-          </Text>
-          <Text as="p" variant="bodySm" tone="subdued">
-            Ready for the central AI Hub — one row per app, no schema change
-            needed when more apps join.
-          </Text>
-          <DataTable
-            columnContentTypes={["text", "text", "numeric", "numeric"]}
-            headings={["App", "Agents active", "Tasks (30d)", "Revenue (30d)"]}
-            rows={appAgentMatrix.map((r) => [
-              r.app,
-              r.agents,
-              String(r.tasks30d),
-              `$${r.revenue30d.toFixed(2)}`,
-            ])}
-          />
-        </BlockStack>
       </BlockStack>
     </Card>
   );
 }
 
-export default function AdminReport() {
-  const { today, last7, last30, recent, providers, aiFailures, skills, agents, providerNames, workload, appAgentMatrix } =
+export default function AdminControlPanel() {
+  const { providers, aiFailures, skills, agents, providerNames } =
     useLoaderData<typeof loader>();
   const actionData = useActionData<{ agentError?: string; providerError?: string }>();
   return (
-    <Page title="AI Report" subtitle="What the AI did, who used it, what it earned">
+    <Page title="AI Control Panel" subtitle="Manage AI providers and agents">
       <Layout>
         <Layout.Section>
           <BlockStack gap="500">
-            <PeriodSection stats={today} />
-            <PeriodSection stats={last7} />
-            <PeriodSection stats={last30} />
-
             <ProvidersSection
               providers={providers}
               aiFailures={aiFailures}
@@ -1087,8 +855,6 @@ export default function AdminReport() {
               agents={agents}
               providerNames={providerNames}
               actionError={actionData?.agentError}
-              workload={workload}
-              appAgentMatrix={appAgentMatrix}
             />
 
             <Card>
@@ -1111,19 +877,6 @@ export default function AdminReport() {
                   (add / edit / enable / disable). Per-skill enable/disable and
                   fees are still managed via app/lib/pricing.ts.
                 </Text>
-              </BlockStack>
-            </Card>
-
-            <Card>
-              <BlockStack gap="300">
-                <Text as="h2" variant="headingMd">
-                  Recent activity
-                </Text>
-                <DataTable
-                  columnContentTypes={["text", "text", "text", "text", "numeric"]}
-                  headings={["Time (UTC)", "Shop", "Action", "Detail", "Fee"]}
-                  rows={recent}
-                />
               </BlockStack>
             </Card>
           </BlockStack>
