@@ -5,8 +5,8 @@ COPY package.json ./
 RUN npm install
 COPY . .
 RUN npx prisma generate
-RUN npx prisma db push --accept-data-loss
 RUN npm run build
 ENV NODE_ENV=production
 EXPOSE 3000
-CMD ["npx", "remix-serve", "./build/server/index.js"]
+# Apply the schema to the volume DB at container start (volumes don't exist at build time).
+CMD ["sh", "-c", "npx prisma db push --accept-data-loss && npx remix-serve ./build/server/index.js"]

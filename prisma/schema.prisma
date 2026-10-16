@@ -10,7 +10,9 @@ generator client {
 
 datasource db {
   provider = "sqlite"
-  url      = "file:dev.sqlite"
+  // Path comes from env so Railway can point it at the persistent volume
+  // (/data). Local dev: DATABASE_URL="file:./dev.db" — see .env.example.
+  url      = env("DATABASE_URL")
 }
 
 model Session {
