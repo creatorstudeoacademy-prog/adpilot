@@ -6,7 +6,7 @@
 # application_url, and redirect_urls before deploying.
 client_id = "f5feb18942e0d098f96e02c31159d136"
 name = "AdPilot - Social Media Command"
-handle = "adpilot"
+handle = "adpilot-social"
 application_url = "https://adpilot-production-c9f8.up.railway.app"
 embedded = true
 
