@@ -25,8 +25,8 @@
 import prisma from "../db.server";
 import {
   generateWithProvider,
-  getProviderByName,
-  resolveProviders,
+  getProviderByNameAsync,
+  resolveProvidersAsync,
 } from "./ai.server";
 import { SECTORS } from "./ai-sectors";
 
@@ -183,9 +183,9 @@ export async function generateForSector(
 
   const failures: string[] = [];
   for (const agent of candidates) {
-    const cfg = getProviderByName(agent.providerName);
+    const cfg = await getProviderByNameAsync(agent.providerName);
     if (!cfg) {
-      const msg = `provider "${agent.providerName}" is not configured (check AI_PROVIDER_ORDER / AI_<NAME>_KEY)`;
+      const msg = `provider "${agent.providerName}" is not configured (add it in /app/admin → AI providers, or check AI_PROVIDER_ORDER / AI_<NAME>_KEY)`;
       console.error(`[adpilot agents] agent "${agent.name}" skipped: ${msg}`);
       failures.push(`${agent.name}: ${msg}`);
       continue;
@@ -252,8 +252,9 @@ export async function createAgent(input: CreateAgentInput): Promise<AgentRow> {
   const name = input.name.trim();
   if (!name) throw new Error("Agent name is required.");
   const providerName = input.providerName.trim().toLowerCase();
-  if (!getProviderByName(providerName)) {
-    const known = resolveProviders().map((p) => p.name).join(", ") || "(none configured)";
+  if (!(await getProviderByNameAsync(providerName))) {
+    const known =
+      (await resolveProvidersAsync()).map((p) => p.name).join(", ") || "(none configured)";
     throw new Error(
       `Provider "${input.providerName}" is not configured. Configured providers: ${known}.`,
     );

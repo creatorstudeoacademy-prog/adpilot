@@ -4,7 +4,7 @@ import { json } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import { deduct, getWallet, isFreeShop, refund } from "../lib/wallet.server";
 import { AI_GENERATION_FEE } from "../lib/pricing";
-import { generateCaption, listProviders } from "../lib/ai.server";
+import { generateCaption, listProvidersAsync } from "../lib/ai.server";
 import { logActivity } from "../lib/activity.server";
 
 /**
@@ -36,7 +36,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   // Fail fast (no charge) when no provider is configured.
-  if (listProviders().length === 0) {
+  if ((await listProvidersAsync()).length === 0) {
     return json(
       {
         ok: false,

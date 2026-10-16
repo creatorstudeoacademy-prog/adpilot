@@ -1,10 +1,51 @@
 # AdPilot AI Setup — plug in any AI provider, no code changes
 
-AdPilot's AI caption generator uses a **generic provider system**. Providers are
-resolved from env vars at runtime, tried in priority order, with automatic
-fallback to the next provider if one fails.
+AdPilot's AI caption generator uses a **generic provider system**. Add providers
+two ways: the **admin panel** (easiest — no redeploy) or **env vars** (advanced).
+Providers are tried in priority order, with automatic fallback to the next
+provider if one fails.
 
-## Env vars
+## Managing providers from the admin panel (recommended)
+
+`/app/admin` → **AI providers** (owner-only). No Railway changes, no redeploy —
+providers take effect immediately.
+
+**Add a provider:** fill in the form —
+- **Name** — a short slot name, e.g. `groq` (lowercase letters, digits, dashes).
+- **Type** — `OpenAI-compatible` (Groq, Together, OpenRouter, DeepSeek,
+  self-hosted…) or `Anthropic`.
+- **API key** — pasted once, encrypted before storage, never shown again
+  (only the last 4 characters appear, as `••••1234`).
+- **Model** — e.g. `llama-3.3-70b-versatile`, `claude-haiku-4-5`.
+- **Base URL** — only for OpenAI-compatible endpoints
+  (e.g. `https://api.groq.com/openai/v1`); leave empty for the default.
+- **Enabled** — untick to pause a provider without deleting it.
+
+**Edit / disable / delete:** each provider row has Edit (change type, model,
+key, base URL — leave the key blank to keep the current one), Enable/Disable,
+and Delete. Deleting is safe: agents using that provider automatically fall
+back to the next provider.
+
+**Priority order:** admin-panel providers are tried **first** (in list order),
+then Railway env-var providers. A provider added here with the same name as
+an env-var slot (e.g. `claude`) **overrides** the env one — that's the
+supported way to migrate a provider from env vars into the panel.
+
+**Badges:** `Admin panel` = managed here (editable). `Railway` = configured
+via env vars (read-only here — edit in Railway → Variables → redeploy).
+
+**Encryption note:** keys are encrypted with AES-256-GCM (random IV per key).
+The vault key is `AI_VAULT_KEY` when set, otherwise it falls back to
+`SHOPIFY_API_SECRET`. Set an explicit `AI_VAULT_KEY` in Railway Variables for
+production: if the vault key ever changes, stored keys become undecryptable —
+those providers are skipped (logged) until you re-enter their keys. Nothing
+breaks; generation falls through to the next provider.
+
+## Env vars (advanced / alternative)
+
+Everything below still works exactly as before — env-var providers are simply
+tried *after* admin-panel providers. Useful for the first bootstrap provider
+or when you prefer config-as-code.
 
 | Var | Meaning |
 |---|---|
@@ -13,6 +54,7 @@ fallback to the next provider if one fails.
 | `AI_<X>_KEY` | API key (required) |
 | `AI_<X>_MODEL` | Model id (required) |
 | `AI_<X>_BASE_URL` | **openai-type only.** Custom endpoint so ANY OpenAI-compatible API works (Groq, Together, OpenRouter, DeepSeek, self-hosted…). Default: `https://api.openai.com/v1` |
+| `AI_VAULT_KEY` | **(recommended)** Vault key for encrypting admin-panel provider keys. Falls back to `SHOPIFY_API_SECRET` when unset. |
 
 A slot missing `KEY` or `MODEL` (or with an unknown `TYPE`) is skipped silently.
 If no slot is configured, merchants see: *"AI is not configured yet."*
@@ -153,9 +195,9 @@ posts/ads/audiences per day, active merchants, and revenue — plus an
 **AI Providers** section (configured providers, priority order, per-provider
 usage, recent failures) and **AI Skills** (fee per skill).
 
-> **Future:** editing API keys and enabling/disabling skills from the dashboard
-> itself. For now keys live in env vars (Railway → Variables → Redeploy) and
-> fees in `app/lib/pricing.ts`.
+> Providers can now be added/edited/enabled/disabled from the dashboard itself
+> (see "Managing providers from the admin panel" above). Per-skill
+> enable/disable and fees are still managed via `app/lib/pricing.ts`.
 
 ## Pricing
 

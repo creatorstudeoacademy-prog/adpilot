@@ -223,3 +223,25 @@ model AiAgent {
 
   @@index([enabled, priority])
 }
+
+/// An AI provider added from the admin panel (/app/admin → AI providers).
+/// The API key is stored encrypted (AES-256-GCM, see app/lib/ai-providers.server.ts);
+/// only the last 4 chars (keyHint) are ever shown in the UI.
+/// Resolution order: enabled DB providers (sortOrder asc) FIRST, then env-var
+/// providers from AI_PROVIDER_ORDER. A DB provider whose name matches an env
+/// slot wins (the env slot is skipped). Part of the portable AI module.
+model AiProvider {
+  id           String   @id @default(cuid())
+  name         String   @unique // lowercase slot name, e.g. "groq"
+  type         String   // "openai" | "anthropic"
+  keyEncrypted String   // AES-256-GCM, format "iv:ciphertext:tag" (hex)
+  keyHint      String   // last 4 chars of the key, safe for display
+  model        String
+  baseUrl      String?  // openai-type only; custom endpoint (null = provider default)
+  sortOrder    Int      @default(0) // lower = tried first
+  enabled      Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([enabled, sortOrder])
+}

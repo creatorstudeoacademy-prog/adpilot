@@ -10,9 +10,17 @@
  * extract it verbatim into a shared "AI Hub" package used by all of his
  * apps; keep it that way when editing.
  *
- * The owner can plug in ANY AI provider later without code changes — just env vars.
+ * The owner can plug in ANY AI provider later without code changes — just env vars
+ * or the admin panel (/app/admin → AI providers, stored encrypted in the DB).
  * Providers are resolved from numbered slots (up to 5), tried in priority order,
  * with automatic fallback to the next provider on failure.
+ *
+ * ─── Resolution order (async) ───────────────────────────────────────────────
+ * DB providers added in the admin panel (enabled, sortOrder asc) are tried
+ * FIRST, then env-var providers from AI_PROVIDER_ORDER. A DB provider whose
+ * name matches an env slot wins — the env slot is skipped. See
+ * resolveProvidersAsync() below. The synchronous resolveProviders() resolves
+ * env-var providers only (kept for backward compatibility).
  *
  * ─── Env config ─────────────────────────────────────────────────────────────
  * AI_PROVIDER_ORDER = comma-separated slot names in priority order, e.g.
@@ -71,8 +79,10 @@ export interface CaptionResult {
   agent?: string;
 }
 
+import { listDbProviders, DEFAULT_OPENAI_BASE_URL } from "./ai-providers.server";
+
 const MAX_SLOTS = 5;
-const DEFAULT_OPENAI_BASE = "https://api.openai.com/v1";
+const DEFAULT_OPENAI_BASE = DEFAULT_OPENAI_BASE_URL;
 const ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
 
@@ -89,7 +99,8 @@ function env(name: string): string {
   return (process.env[name] ?? "").trim();
 }
 
-/** Resolve configured providers in priority order. Skips incomplete slots. */
+/** Resolve ENV-VAR providers in priority order. Skips incomplete slots.
+ *  (Env only — use resolveProvidersAsync() for the merged DB + env list.) */
 export function resolveProviders(): AIProviderConfig[] {
   const order = (env("AI_PROVIDER_ORDER") || "openai")
     .split(",")
@@ -128,9 +139,45 @@ export function resolveProviders(): AIProviderConfig[] {
   return providers;
 }
 
-/** Names of configured providers, in priority order. Empty = none configured. */
+/** Names of ENV-VAR providers, in priority order. Empty = none configured.
+ *  (Env only — use listProvidersAsync() for the merged DB + env list.) */
 export function listProviders(): string[] {
   return resolveProviders().map((p) => p.name);
+}
+
+/**
+ * Merged provider list: DB providers added in the admin panel (enabled,
+ * sortOrder asc) FIRST, then env-var providers from AI_PROVIDER_ORDER.
+ * A DB provider whose name matches an env slot wins — the env slot is
+ * skipped. If the DB is unreachable the env list is used alone (logged).
+ */
+export async function resolveProvidersAsync(): Promise<AIProviderConfig[]> {
+  let db: Awaited<ReturnType<typeof listDbProviders>> = [];
+  try {
+    db = await listDbProviders();
+  } catch (e) {
+    console.error(
+      `[adpilot ai] DB providers unavailable, using env only: ${e instanceof Error ? e.message : e}`,
+    );
+  }
+  const dbNames = new Set(db.map((p) => p.name));
+  const merged: AIProviderConfig[] = db.map((p) => ({
+    name: p.name,
+    type: p.type,
+    apiKey: p.apiKey,
+    model: p.model,
+    baseUrl: p.baseUrl,
+  }));
+  for (const p of resolveProviders()) {
+    if (dbNames.has(p.name)) continue; // DB wins the name
+    merged.push(p);
+  }
+  return merged;
+}
+
+/** Names of ALL configured providers (DB first, then env), in try-order. */
+export async function listProvidersAsync(): Promise<string[]> {
+  return (await resolveProvidersAsync()).map((p) => p.name);
 }
 
 function buildUserPrompt(input: CaptionInput): string {
@@ -254,10 +301,19 @@ export async function generateWithProvider(
   return text;
 }
 
-/** Find a configured provider by slot name (case-insensitive). */
+/** Find an ENV-VAR provider by slot name (case-insensitive).
+ *  (Env only — use getProviderByNameAsync() for the merged DB + env list.) */
 export function getProviderByName(name: string): AIProviderConfig | undefined {
   const want = name.trim().toLowerCase();
   return resolveProviders().find((p) => p.name === want);
+}
+
+/** Find ANY configured provider (DB first, then env) by name (case-insensitive). */
+export async function getProviderByNameAsync(
+  name: string,
+): Promise<AIProviderConfig | undefined> {
+  const want = name.trim().toLowerCase();
+  return (await resolveProvidersAsync()).find((p) => p.name === want);
 }
 
 async function callOpenAI(
@@ -304,11 +360,12 @@ export async function generateCaption(input: CaptionInput): Promise<CaptionResul
     return { ...result, agent };
   }
 
-  // Legacy path: no agents configured — try providers in AI_PROVIDER_ORDER.
-  const providers = resolveProviders();
+  // Legacy path: no agents configured — try providers in merged order
+  // (admin-panel DB providers first, then AI_PROVIDER_ORDER).
+  const providers = await resolveProvidersAsync();
   if (providers.length === 0) {
     throw new Error(
-      "AI_NOT_CONFIGURED: no AI provider configured. Set AI_PROVIDER_ORDER and AI_<NAME>_KEY / AI_<NAME>_MODEL env vars (see AI_SETUP.md).",
+      "AI_NOT_CONFIGURED: no AI provider configured. Add one in /app/admin → AI providers, or set AI_PROVIDER_ORDER and AI_<NAME>_KEY / AI_<NAME>_MODEL env vars (see AI_SETUP.md).",
     );
   }
 

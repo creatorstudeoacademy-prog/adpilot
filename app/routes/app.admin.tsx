@@ -2,6 +2,7 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json, redirect } from "@remix-run/node";
 import { Form, useActionData, useFetcher, useLoaderData } from "@remix-run/react";
 import {
+  Badge,
   BlockStack,
   Button,
   Card,
@@ -20,7 +21,15 @@ import { useState } from "react";
 
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import { listProviders, resolveProviders } from "../lib/ai.server";
+import { listProvidersAsync, resolveProviders } from "../lib/ai.server";
+import {
+  createProvider,
+  deleteProvider,
+  listDbProviderMetas,
+  setProviderEnabled,
+  updateProvider,
+  type DbProviderMeta,
+} from "../lib/ai-providers.server";
 import {
   SECTORS,
 } from "../lib/ai-sectors";
@@ -93,10 +102,19 @@ interface PeriodStats {
 }
 
 interface ProviderInfo {
+  /** DB row id, or null for env-var providers (read-only here). */
+  id: string | null;
   name: string;
   type: string;
   model: string;
+  /** "db" = added in this panel (editable), "env" = Railway env vars (read-only). */
+  source: "db" | "env";
   keyConfigured: boolean;
+  /** Last 4 chars of the key (DB providers only) — safe for display. */
+  keyHint: string | null;
+  enabled: boolean;
+  /** Try-order within its source (lower = first). Env rows show list position. */
+  sortOrder: number;
   endpoint: string;
   generations30d: number;
 }
@@ -171,14 +189,44 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const last30 = { ...summarize(rows, month), label: "Last 30 days" };
 
   // ── AI providers (keys NEVER leave the server) ──
-  const providers: ProviderInfo[] = resolveProviders().map((p) => ({
-    name: p.name,
-    type: p.type,
-    model: p.model,
-    keyConfigured: Boolean(p.apiKey),
-    endpoint: p.type === "anthropic" ? "api.anthropic.com" : p.baseUrl,
-    generations30d: 0,
-  }));
+  // DB providers added in this panel (sortOrder asc) first, then Railway
+  // env-var providers. A DB provider whose name matches an env slot wins.
+  const dbMetas: DbProviderMeta[] = await listDbProviderMetas().catch((e) => {
+    console.error(`[adpilot admin] listDbProviderMetas failed: ${e instanceof Error ? e.message : e}`);
+    return [];
+  });
+  const envCfgs = resolveProviders();
+  const dbNames = new Set(dbMetas.map((m) => m.name));
+  const providers: ProviderInfo[] = [
+    ...dbMetas.map((m) => ({
+      id: m.id,
+      name: m.name,
+      type: m.type,
+      model: m.model,
+      source: "db" as const,
+      keyConfigured: true,
+      keyHint: m.keyHint,
+      enabled: m.enabled,
+      sortOrder: m.sortOrder,
+      endpoint: m.type === "anthropic" ? "api.anthropic.com" : m.baseUrl,
+      generations30d: 0,
+    })),
+    ...envCfgs
+      .filter((p) => !dbNames.has(p.name))
+      .map((p, i) => ({
+        id: null,
+        name: p.name,
+        type: p.type,
+        model: p.model,
+        source: "env" as const,
+        keyConfigured: Boolean(p.apiKey),
+        keyHint: null,
+        enabled: true,
+        sortOrder: i,
+        endpoint: p.type === "anthropic" ? "api.anthropic.com" : p.baseUrl,
+        generations30d: 0,
+      })),
+  ];
   const aiFailures: AiFailure[] = [];
   for (const r of rows) {
     if (r.action !== "ai_generate" || !r.detail) continue;
@@ -204,7 +252,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   ]);
 
   const agents = await listAgents();
-  const providerNames = listProviders();
+  const providerNames = await listProvidersAsync();
   // Serialize Dates for the client (useLoaderData JSON).
   const agentsJson: ClientAgent[] = agents.map((a) => ({
     ...a,
@@ -290,6 +338,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   const form = await request.formData();
   const intent = String(form.get("intent") ?? "");
+  const providerError = async (fn: () => Promise<unknown>) => {
+    try {
+      await fn();
+    } catch (e) {
+      return json(
+        { providerError: e instanceof Error ? e.message : "Failed." },
+        { status: 400 },
+      );
+    }
+    return redirect("/app/admin");
+  };
   try {
     if (intent === "create-agent") {
       const parseDate = (v: FormDataEntryValue | null): Date | null => {
@@ -310,6 +369,40 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       });
     } else if (intent === "delete-agent") {
       await deleteAgent(String(form.get("agentId") ?? ""));
+    } else if (intent === "create-provider") {
+      return providerError(() =>
+        createProvider({
+          name: String(form.get("name") ?? ""),
+          type: String(form.get("type") ?? ""),
+          key: String(form.get("key") ?? ""),
+          model: String(form.get("model") ?? ""),
+          baseUrl: String(form.get("baseUrl") ?? ""),
+          enabled: form.get("enabled") === "on",
+        }),
+      );
+    } else if (intent === "update-provider") {
+      return providerError(() =>
+        updateProvider(String(form.get("providerId") ?? ""), {
+          type: String(form.get("type") ?? "") || undefined,
+          key: String(form.get("key") ?? "") || undefined,
+          model: String(form.get("model") ?? "") || undefined,
+          baseUrl: form.get("baseUrl") !== null ? String(form.get("baseUrl")) : undefined,
+          sortOrder:
+            form.get("sortOrder") !== null && String(form.get("sortOrder")).trim() !== ""
+              ? Number(form.get("sortOrder"))
+              : undefined,
+          enabled: form.get("enabled") === "on",
+        }),
+      );
+    } else if (intent === "toggle-provider") {
+      return providerError(() =>
+        setProviderEnabled(
+          String(form.get("providerId") ?? ""),
+          form.get("enabled") === "on",
+        ),
+      );
+    } else if (intent === "delete-provider") {
+      return providerError(() => deleteProvider(String(form.get("providerId") ?? "")));
     } else {
       return json({ agentError: "Unknown action." }, { status: 400 });
     }
@@ -402,6 +495,331 @@ function AgentUpload({ agentId, fileName }: { agentId: string; fileName: string 
         </Text>
       )}
     </BlockStack>
+  );
+}
+
+function ProvidersSection({
+  providers,
+  aiFailures,
+  actionError,
+}: {
+  providers: ProviderInfo[];
+  aiFailures: Array<{ time: string; shop: string; message: string }>;
+  actionError?: string;
+}) {
+  // Add-form state — all TextFields are CONTROLLED (uncontrolled Polaris
+  // TextFields silently dropped keystrokes here before; see agent-name fix).
+  const [pName, setPName] = useState("");
+  const [pType, setPType] = useState("openai");
+  const [pKey, setPKey] = useState("");
+  const [pModel, setPModel] = useState("");
+  const [pBaseUrl, setPBaseUrl] = useState("");
+  const [pEnabled, setPEnabled] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const editing =
+    providers.find((p) => p.id === editingId && p.source === "db") ?? null;
+
+  const typeLabel = (t: string) =>
+    t === "anthropic" ? "Anthropic" : "OpenAI-compatible";
+
+  return (
+    <Card>
+      <BlockStack gap="400">
+        <Text as="h2" variant="headingMd">
+          AI providers
+        </Text>
+        <Text as="p" variant="bodySm" tone="subdued">
+          Providers added here are tried first (in list order), then Railway
+          env-var providers. API keys are encrypted before storage and never
+          shown — only the last 4 characters. A provider with the same name as
+          a Railway variable overrides it.
+        </Text>
+        {actionError && (
+          <Text as="p" variant="bodySm" tone="critical">
+            {actionError}
+          </Text>
+        )}
+
+        <BlockStack gap="300">
+          <Text as="h3" variant="headingSm">
+            Add provider
+          </Text>
+          <Form method="post">
+            <input type="hidden" name="intent" value="create-provider" />
+            <BlockStack gap="300">
+              <Grid>
+                <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
+                  <TextField
+                    label="Name"
+                    name="name"
+                    placeholder="e.g. groq"
+                    helpText="Lowercase letters, digits, dashes."
+                    value={pName}
+                    onChange={setPName}
+                    autoComplete="off"
+                  />
+                </Grid.Cell>
+                <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
+                  <Select
+                    label="Type"
+                    name="type"
+                    options={[
+                      { label: "OpenAI-compatible", value: "openai" },
+                      { label: "Anthropic", value: "anthropic" },
+                    ]}
+                    value={pType}
+                    onChange={setPType}
+                  />
+                </Grid.Cell>
+                <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 6, lg: 6, xl: 6 }}>
+                  <TextField
+                    label="API key"
+                    name="key"
+                    type="password"
+                    value={pKey}
+                    onChange={setPKey}
+                    autoComplete="off"
+                  />
+                </Grid.Cell>
+                <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 6, lg: 6, xl: 6 }}>
+                  <TextField
+                    label="Model"
+                    name="model"
+                    placeholder="e.g. llama-3.3-70b-versatile"
+                    value={pModel}
+                    onChange={setPModel}
+                    autoComplete="off"
+                  />
+                </Grid.Cell>
+                <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 6, lg: 6, xl: 6 }}>
+                  <TextField
+                    label="Base URL (optional)"
+                    name="baseUrl"
+                    placeholder="https://api.groq.com/openai/v1"
+                    helpText="Only for OpenAI-compatible endpoints."
+                    value={pBaseUrl}
+                    onChange={setPBaseUrl}
+                    autoComplete="off"
+                  />
+                </Grid.Cell>
+              </Grid>
+              <InlineStack gap="300" blockAlign="center">
+                <Checkbox
+                  label="Enabled"
+                  name="enabled"
+                  checked={pEnabled}
+                  onChange={setPEnabled}
+                />
+                <Button submit>Add provider</Button>
+              </InlineStack>
+            </BlockStack>
+          </Form>
+        </BlockStack>
+
+        {providers.length === 0 ? (
+          <Text as="p" variant="bodyMd" tone="critical">
+            No AI provider configured. Add one with the form above, or set
+            AI_PROVIDER_ORDER and AI_&lt;NAME&gt;_KEY / AI_&lt;NAME&gt;_MODEL in
+            Railway variables and redeploy.
+          </Text>
+        ) : (
+          <DataTable
+            columnContentTypes={[
+              "text",
+              "text",
+              "text",
+              "text",
+              "text",
+              "text",
+              "text",
+              "numeric",
+              "text",
+            ]}
+            headings={[
+              "Name",
+              "Type",
+              "Model",
+              "Key",
+              "Source",
+              "Status",
+              "Generations (30d)",
+              "",
+              "",
+            ]}
+            rows={providers.map((p) => [
+              p.name,
+              typeLabel(p.type),
+              p.model,
+              p.source === "db" ? `••••${p.keyHint ?? ""}` : p.keyConfigured ? "✓ configured" : "✗ missing",
+              p.source === "db" ? (
+                <Badge key={`src-${p.id}`}>Admin panel</Badge>
+              ) : (
+                <Badge key={`src-${p.name}`} tone="info">
+                  Railway
+                </Badge>
+              ),
+              p.source === "db" ? (p.enabled ? "Enabled" : "Disabled") : "Always on",
+              String(p.generations30d),
+              p.source === "db" && p.id ? (
+                <InlineStack key={`acts-${p.id}`} gap="100">
+                  <Button size="slim" onClick={() => setEditingId(p.id)}>
+                    Edit
+                  </Button>
+                  <Form method="post">
+                    <input type="hidden" name="intent" value="toggle-provider" />
+                    <input type="hidden" name="providerId" value={p.id} />
+                    <input
+                      type="hidden"
+                      name="enabled"
+                      value={p.enabled ? "off" : "on"}
+                    />
+                    <Button submit size="slim">
+                      {p.enabled ? "Disable" : "Enable"}
+                    </Button>
+                  </Form>
+                  <Form method="post">
+                    <input type="hidden" name="intent" value="delete-provider" />
+                    <input type="hidden" name="providerId" value={p.id} />
+                    <Button submit size="slim" tone="critical">
+                      Delete
+                    </Button>
+                  </Form>
+                </InlineStack>
+              ) : (
+                <Text key={`ro-${p.name}`} as="span" variant="bodySm" tone="subdued">
+                  Manage in Railway
+                </Text>
+              ),
+              "",
+            ])}
+          />
+        )}
+
+        {editing && (
+          <ProviderEditForm
+            key={editing.id}
+            provider={editing}
+            onCancel={() => setEditingId(null)}
+          />
+        )}
+
+        {aiFailures.length > 0 && (
+          <BlockStack gap="200">
+            <Text as="h3" variant="headingSm">
+              Recent AI failures / fallbacks
+            </Text>
+            <DataTable
+              columnContentTypes={["text", "text", "text"]}
+              headings={["Time (UTC)", "Shop", "Error"]}
+              rows={aiFailures
+                .slice(0, 10)
+                .map((f) => [f.time, f.shop, f.message])}
+            />
+          </BlockStack>
+        )}
+      </BlockStack>
+    </Card>
+  );
+}
+
+function ProviderEditForm({
+  provider,
+  onCancel,
+}: {
+  provider: ProviderInfo;
+  onCancel: () => void;
+}) {
+  const [eType, setEType] = useState(provider.type);
+  const [eModel, setEModel] = useState(provider.model);
+  const [eKey, setEKey] = useState("");
+  const [eBaseUrl, setEBaseUrl] = useState(
+    provider.endpoint && provider.type !== "anthropic" ? provider.endpoint : "",
+  );
+  const [eEnabled, setEEnabled] = useState(provider.enabled);
+  const [eSortOrder, setESortOrder] = useState(String(provider.sortOrder ?? 0));
+  return (
+    <Card>
+      <BlockStack gap="300">
+        <Text as="h3" variant="headingSm">
+          Edit provider “{provider.name}”
+        </Text>
+        <Form method="post">
+          <input type="hidden" name="intent" value="update-provider" />
+          <input type="hidden" name="providerId" value={provider.id ?? ""} />
+          <BlockStack gap="300">
+            <Grid>
+              <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
+                <Select
+                  label="Type"
+                  name="type"
+                  options={[
+                    { label: "OpenAI-compatible", value: "openai" },
+                    { label: "Anthropic", value: "anthropic" },
+                  ]}
+                  value={eType}
+                  onChange={setEType}
+                />
+              </Grid.Cell>
+              <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 6, lg: 6, xl: 6 }}>
+                <TextField
+                  label="Model"
+                  name="model"
+                  value={eModel}
+                  onChange={setEModel}
+                  autoComplete="off"
+                />
+              </Grid.Cell>
+              <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
+                <TextField
+                  label="Priority (lower = tried first)"
+                  name="sortOrder"
+                  type="number"
+                  value={eSortOrder}
+                  onChange={setESortOrder}
+                  autoComplete="off"
+                />
+              </Grid.Cell>
+              <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 6, lg: 6, xl: 6 }}>
+                <TextField
+                  label="New API key (optional)"
+                  name="key"
+                  type="password"
+                  placeholder="Leave blank to keep the current key"
+                  helpText="Only fill this in to rotate the key."
+                  value={eKey}
+                  onChange={setEKey}
+                  autoComplete="off"
+                />
+              </Grid.Cell>
+              <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 6, lg: 6, xl: 6 }}>
+                <TextField
+                  label="Base URL"
+                  name="baseUrl"
+                  helpText="Only for OpenAI-compatible endpoints. Empty = provider default."
+                  value={eBaseUrl}
+                  onChange={setEBaseUrl}
+                  autoComplete="off"
+                />
+              </Grid.Cell>
+            </Grid>
+            <InlineStack gap="300" blockAlign="center">
+              <Checkbox
+                label="Enabled"
+                name="enabled"
+                checked={eEnabled}
+                onChange={setEEnabled}
+              />
+              <Button submit>Save changes</Button>
+              <Button onClick={onCancel}>Cancel</Button>
+            </InlineStack>
+            <Text as="p" variant="bodySm" tone="subdued">
+              Agents using this provider keep working — the name cannot be
+              changed (delete and recreate to rename).
+            </Text>
+          </BlockStack>
+        </Form>
+      </BlockStack>
+    </Card>
   );
 }
 
@@ -649,7 +1067,7 @@ function AgentsSection({
 export default function AdminReport() {
   const { today, last7, last30, recent, providers, aiFailures, skills, agents, providerNames, workload, appAgentMatrix } =
     useLoaderData<typeof loader>();
-  const actionData = useActionData<{ agentError?: string }>();
+  const actionData = useActionData<{ agentError?: string; providerError?: string }>();
   return (
     <Page title="AI Report" subtitle="What the AI did, who used it, what it earned">
       <Layout>
@@ -659,68 +1077,11 @@ export default function AdminReport() {
             <PeriodSection stats={last7} />
             <PeriodSection stats={last30} />
 
-            <Card>
-              <BlockStack gap="300">
-                <Text as="h2" variant="headingMd">
-                  AI providers
-                </Text>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Tried in priority order (AI_PROVIDER_ORDER). API keys are
-                  never shown here — they live in env vars (see AI_SETUP.md).
-                </Text>
-                {providers.length === 0 ? (
-                  <Text as="p" variant="bodyMd" tone="critical">
-                    No AI provider configured. Add AI_PROVIDER_ORDER and
-                    AI_&lt;NAME&gt;_KEY / AI_&lt;NAME&gt;_MODEL in Railway
-                    variables, then redeploy.
-                  </Text>
-                ) : (
-                  <DataTable
-                    columnContentTypes={[
-                      "numeric",
-                      "text",
-                      "text",
-                      "text",
-                      "text",
-                      "text",
-                      "numeric",
-                    ]}
-                    headings={[
-                      "#",
-                      "Name",
-                      "Type",
-                      "Model",
-                      "Key",
-                      "Endpoint",
-                      "Generations (30d)",
-                    ]}
-                    rows={providers.map((p, i) => [
-                      String(i + 1),
-                      p.name,
-                      p.type,
-                      p.model,
-                      p.keyConfigured ? "✓ configured" : "✗ missing",
-                      p.endpoint,
-                      String(p.generations30d),
-                    ])}
-                  />
-                )}
-                {aiFailures.length > 0 && (
-                  <BlockStack gap="200">
-                    <Text as="h3" variant="headingSm">
-                      Recent AI failures / fallbacks
-                    </Text>
-                    <DataTable
-                      columnContentTypes={["text", "text", "text"]}
-                      headings={["Time (UTC)", "Shop", "Error"]}
-                      rows={aiFailures
-                        .slice(0, 10)
-                        .map((f) => [f.time, f.shop, f.message])}
-                    />
-                  </BlockStack>
-                )}
-              </BlockStack>
-            </Card>
+            <ProvidersSection
+              providers={providers}
+              aiFailures={aiFailures}
+              actionError={actionData?.providerError}
+            />
 
             <AgentsSection
               agents={agents}
@@ -746,9 +1107,9 @@ export default function AdminReport() {
                   ])}
                 />
                 <Text as="p" variant="bodySm" tone="subdued">
-                  Enable/disable and key editing from this dashboard is coming
-                  later — for now keys and fees are managed via env vars and
-                  app/lib/pricing.ts.
+                  Provider keys are managed in the AI providers section above
+                  (add / edit / enable / disable). Per-skill enable/disable and
+                  fees are still managed via app/lib/pricing.ts.
                 </Text>
               </BlockStack>
             </Card>
