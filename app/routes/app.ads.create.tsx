@@ -25,7 +25,8 @@ import { useState } from "react";
 
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import { OBJECTIVES, publishFullCampaign } from "../lib/meta-ads.server";
+import { OBJECTIVES } from "../lib/meta-ads";
+import { publishFullCampaign } from "../lib/meta-ads.server";
 import { deduct, getWallet, refund } from "../lib/wallet.server";
 import {
   OBJECTIVE_FEES,
