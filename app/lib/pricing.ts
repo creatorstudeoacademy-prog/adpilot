@@ -26,6 +26,23 @@ export const EXTRA_ADSET_FEE = 1.5;
 /** Extra fee per creative beyond the first (USD). */
 export const EXTRA_CREATIVE_FEE = 1;
 
+/** Fee per custom/saved audience created for a funnel (USD). */
+export const AUDIENCE_FEE = 1;
+
+/** Full-funnel fee breakdown: 3 campaigns + 3 audiences = $10.50 */
+export const FUNNEL_CAMPAIGN_FEE =
+  OBJECTIVE_FEES.AWARENESS + OBJECTIVE_FEES.ENGAGEMENT + OBJECTIVE_FEES.SALES; // 2 + 2.5 + 3 = 7.5
+export const FUNNEL_AUDIENCE_COUNT = 3;
+export const FUNNEL_AUDIENCE_FEE = AUDIENCE_FEE * FUNNEL_AUDIENCE_COUNT; // 3
+export const FUNNEL_TOTAL_FEE = FUNNEL_CAMPAIGN_FEE + FUNNEL_AUDIENCE_FEE; // 10.5
+
+/** Budget split for the full funnel (fraction of total daily budget). */
+export const FUNNEL_BUDGET_SPLIT = {
+  TOF: 0.5,
+  MOF: 0.3,
+  BOF: 0.2,
+} as const;
+
 export interface FeeBreakdown {
   base: number;
   objectiveLabel: string;

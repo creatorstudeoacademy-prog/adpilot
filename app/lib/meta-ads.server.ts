@@ -321,3 +321,363 @@ export async function toggleCampaign(
     status: active ? "ACTIVE" : "PAUSED",
   });
 }
+
+/* ------------------------------------------------------------------ */
+/* Full-funnel helpers: audiences + 3-stage campaign creation          */
+/* ------------------------------------------------------------------ */
+
+export interface SavedAudienceTargeting {
+  countries: string[];
+  ageMin: number;
+  ageMax: number;
+}
+
+/**
+ * Create a SAVED audience (broad targeting spec) under an ad account.
+ * Used for the TOF stage: country + age, no narrow interests (Advantage+ style broad).
+ * Returns the saved-audience ID.
+ */
+export async function createSavedAudience(
+  adAccountId: string,
+  accessToken: string,
+  name: string,
+  targeting: SavedAudienceTargeting,
+): Promise<string> {
+  const data = await marketingFetch(`/act_${adAccountId}/saved_audiences`, accessToken, {
+    name,
+    targeting: JSON.stringify({
+      geo_locations: { countries: targeting.countries },
+      age_min: targeting.ageMin,
+      age_max: targeting.ageMax,
+    }),
+  });
+  return data.id as string;
+}
+
+export interface CustomAudienceInput {
+  name: string;
+  description?: string;
+  /** VIDEO = video viewers/page engagers, WEBSITE = website visitors */
+  subtype: "VIDEO" | "WEBSITE";
+  /** Page ID (for VIDEO) or pixel ID (for WEBSITE) */
+  sourceId: string;
+  /** Retention in days (default 180) */
+  retentionDays?: number;
+}
+
+/**
+ * Create a CUSTOM audience under an ad account.
+ * - VIDEO: people who engaged with the given Page's videos/content.
+ * - WEBSITE: people who visited the website tracked by the given pixel.
+ * Returns the custom-audience ID.
+ */
+export async function createCustomAudience(
+  adAccountId: string,
+  accessToken: string,
+  input: CustomAudienceInput,
+): Promise<string> {
+  const retentionSeconds = (input.retentionDays ?? 180) * 86400;
+
+  const rule =
+    input.subtype === "VIDEO"
+      ? {
+          inclusions: {
+            operator: "or",
+            rules: [
+              {
+                event_sources: [{ id: input.sourceId, type: "page" }],
+                retention_seconds: retentionSeconds,
+                filter: {
+                  operator: "or",
+                  filters: [
+                    { field: "event", operator: "equal", value: "page_engaged" },
+                  ],
+                },
+              },
+            ],
+          },
+        }
+      : {
+          inclusions: {
+            operator: "or",
+            rules: [
+              {
+                event_sources: [{ id: input.sourceId, type: "pixel" }],
+                retention_seconds: retentionSeconds,
+                filter: {
+                  operator: "or",
+                  filters: [
+                    { field: "url", operator: "i_contains", value: "" },
+                  ],
+                },
+              },
+            ],
+          },
+        };
+
+  const data = await marketingFetch(
+    `/act_${adAccountId}/customaudiences`,
+    accessToken,
+    {
+      name: input.name,
+      description: input.description ?? "",
+      subtype: input.subtype,
+      rule: JSON.stringify(rule),
+      prefill: "true",
+    },
+  );
+  return data.id as string;
+}
+
+/** List ad pixels owned by the ad account (needed for the website audience). */
+export async function getAdPixels(adAccountId: string, accessToken: string) {
+  const data = await marketingFetch(
+    `/act_${adAccountId}/adspixels`,
+    accessToken,
+    { fields: "id,name" },
+    "GET",
+  );
+  return (data.data ?? []) as Array<{ id: string; name: string }>;
+}
+
+/** Ad set creation with fully custom targeting (for funnel stages). */
+export async function createAdSetWithTargeting(
+  adAccountId: string,
+  accessToken: string,
+  campaignId: string,
+  opts: {
+    name: string;
+    dailyBudget: number;
+    targeting: Record<string, unknown>;
+    optimizationGoal?: string;
+    startDate?: Date | null;
+    endDate?: Date | null;
+  },
+): Promise<string> {
+  const params: Record<string, string> = {
+    name: opts.name,
+    campaign_id: campaignId,
+    daily_budget: String(Math.round(opts.dailyBudget * 100)), // cents
+    billing_event: "IMPRESSIONS",
+    optimization_goal: opts.optimizationGoal ?? "REACH",
+    bid_strategy: "LOWEST_COST_WITHOUT_CAP",
+    targeting: JSON.stringify(opts.targeting),
+    status: "PAUSED",
+  };
+  if (opts.startDate) params.start_time = opts.startDate.toISOString();
+  if (opts.endDate) params.end_time = opts.endDate.toISOString();
+
+  const data = await marketingFetch(`/act_${adAccountId}/adsets`, accessToken, params);
+  return data.id as string;
+}
+
+export interface FunnelStageResult {
+  stage: "TOF" | "MOF" | "BOF";
+  audienceId: string | null;
+  audienceFallback: boolean;
+  campaignId: string | null;
+  adSetId: string | null;
+  adId: string | null;
+  error: string | null;
+}
+
+export interface CreateFullFunnelInput {
+  adAccountId: string;
+  accessToken: string;
+  pageId: string;
+  funnelName: string;
+  totalDailyBudget: number;
+  country: string;
+  ageMin: number;
+  ageMax: number;
+  headline: string;
+  primaryText: string;
+  description?: string;
+  imageUrl: string;
+  destinationUrl: string;
+  cta?: string;
+}
+
+/**
+ * Create a full 3-stage funnel:
+ *   1. Create 3 audiences (saved broad for TOF, video-engagement custom for MOF,
+ *      website custom for BOF). Audience failures fall back to standard targeting.
+ *   2. Create 3 campaigns (AWARENESS / ENGAGEMENT / SALES) with budget split 50/30/20.
+ *   3. Create 1 ad set + 1 ad per campaign, then activate everything that succeeded.
+ *
+ * Returns per-stage results so partial failures can be reported.
+ */
+export async function createFullFunnel(
+  input: CreateFullFunnelInput,
+): Promise<{ stages: FunnelStageResult[] }> {
+  const { adAccountId, accessToken } = input;
+  const geo = { countries: [input.country] };
+  const ages = { age_min: input.ageMin, age_max: input.ageMax };
+
+  const stages: FunnelStageResult[] = (["TOF", "MOF", "BOF"] as const).map(
+    (stage) => ({
+      stage,
+      audienceId: null,
+      audienceFallback: false,
+      campaignId: null,
+      adSetId: null,
+      adId: null,
+      error: null,
+    }),
+  );
+  const byStage = (s: "TOF" | "MOF" | "BOF") => stages.find((x) => x.stage === s)!;
+
+  /* ---- Step 1: audiences (each stage gets its own separately created audience) ---- */
+
+  // TOF: saved audience, broad (country + age).
+  try {
+    byStage("TOF").audienceId = await createSavedAudience(
+      adAccountId,
+      accessToken,
+      `${input.funnelName} - TOF Broad`,
+      { countries: [input.country], ageMin: input.ageMin, ageMax: input.ageMax },
+    );
+  } catch (e) {
+    byStage("TOF").audienceFallback = true;
+  }
+
+  // MOF: custom audience — video viewers + page engagers.
+  try {
+    byStage("MOF").audienceId = await createCustomAudience(adAccountId, accessToken, {
+      name: `${input.funnelName} - MOF Video Viewers`,
+      description: "People who watched videos / engaged with the Page",
+      subtype: "VIDEO",
+      sourceId: input.pageId,
+    });
+  } catch (e) {
+    byStage("MOF").audienceFallback = true;
+  }
+
+  // BOF: custom audience — website visitors (needs a pixel on the ad account).
+  try {
+    const pixels = await getAdPixels(adAccountId, accessToken);
+    if (pixels.length === 0) {
+      throw new Error(
+        "No Meta pixel found on this ad account. Install a pixel to use website retargeting.",
+      );
+    }
+    byStage("BOF").audienceId = await createCustomAudience(adAccountId, accessToken, {
+      name: `${input.funnelName} - BOF Website Visitors`,
+      description: "People who visited the website",
+      subtype: "WEBSITE",
+      sourceId: pixels[0].id,
+    });
+  } catch (e) {
+    byStage("BOF").audienceFallback = true;
+  }
+
+  /* ---- Step 2: campaigns + ad sets + ads per stage ---- */
+
+  const stageDefs = [
+    {
+      stage: "TOF" as const,
+      objective: "AWARENESS",
+      budgetShare: 0.5,
+      optimizationGoal: "REACH",
+      targeting: () =>
+        byStage("TOF").audienceId && !byStage("TOF").audienceFallback
+          ? {
+              saved_audience_id: byStage("TOF").audienceId,
+              ...geo,
+              ...ages,
+            }
+          : { geo_locations: geo, ...ages },
+    },
+    {
+      stage: "MOF" as const,
+      objective: "ENGAGEMENT",
+      budgetShare: 0.3,
+      optimizationGoal: "ENGAGED_USERS",
+      targeting: () =>
+        byStage("MOF").audienceId && !byStage("MOF").audienceFallback
+          ? {
+              custom_audiences: [{ id: byStage("MOF").audienceId }],
+              ...geo,
+              ...ages,
+            }
+          : { geo_locations: geo, ...ages },
+    },
+    {
+      stage: "BOF" as const,
+      objective: "SALES",
+      budgetShare: 0.2,
+      optimizationGoal: "OFFSITE_CONVERSIONS",
+      targeting: () =>
+        byStage("BOF").audienceId && !byStage("BOF").audienceFallback
+          ? {
+              custom_audiences: [{ id: byStage("BOF").audienceId }],
+              ...geo,
+              ...ages,
+            }
+          : { geo_locations: geo, ...ages },
+    },
+  ];
+
+  for (const def of stageDefs) {
+    const res = byStage(def.stage);
+    try {
+      const campaignName = `${input.funnelName} - ${def.stage}`;
+      const campaignId = await createCampaign(
+        adAccountId,
+        accessToken,
+        campaignName,
+        def.objective,
+      );
+      res.campaignId = campaignId;
+
+      const dailyBudget = Math.max(
+        1,
+        Math.round(input.totalDailyBudget * def.budgetShare * 100) / 100,
+      );
+      const adSetId = await createAdSetWithTargeting(
+        adAccountId,
+        accessToken,
+        campaignId,
+        {
+          name: `${campaignName} - Ad Set`,
+          dailyBudget,
+          targeting: def.targeting(),
+          optimizationGoal: def.optimizationGoal,
+        },
+      );
+      res.adSetId = adSetId;
+
+      const creativeId = await createAdCreative(
+        adAccountId,
+        accessToken,
+        `${campaignName} - Creative`,
+        {
+          imageUrl: input.imageUrl,
+          headline: input.headline,
+          primaryText: input.primaryText,
+          description: input.description,
+          destinationUrl: input.destinationUrl,
+          cta: input.cta,
+          pageId: input.pageId,
+        },
+      );
+      const adId = await createAd(
+        adAccountId,
+        accessToken,
+        `${campaignName} - Ad`,
+        adSetId,
+        creativeId,
+      );
+      res.adId = adId;
+
+      // Activate this stage's assets.
+      await marketingFetch(`/${campaignId}`, accessToken, { status: "ACTIVE" });
+      await marketingFetch(`/${adSetId}`, accessToken, { status: "ACTIVE" });
+      await marketingFetch(`/${adId}`, accessToken, { status: "ACTIVE" });
+    } catch (e) {
+      res.error = e instanceof Error ? e.message : "Stage publish failed.";
+    }
+  }
+
+  return { stages };
+}

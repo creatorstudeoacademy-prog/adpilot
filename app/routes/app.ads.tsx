@@ -55,6 +55,11 @@ export default function AdsDashboard() {
           ? { content: "Create campaign", url: "/app/ads/create" }
           : undefined
       }
+      secondaryActions={
+        adAccounts.length > 0
+          ? [{ content: "Full-funnel campaign", url: "/app/ads/funnel" }]
+          : undefined
+      }
     >
       <BlockStack gap="500">
         {adAccounts.length === 0 ? (

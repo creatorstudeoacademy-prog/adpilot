@@ -82,12 +82,34 @@ model AdAccount {
   @@unique([shop, adAccountId])
 }
 
+/// A full-funnel group: one-click 3-stage funnel (TOF/MOF/BOF).
+model FunnelGroup {
+  id             String   @id @default(cuid())
+  shop           String
+  adAccountId    String
+  name           String
+  totalDailyBudget Float
+  country        String   @default("US")
+  ageMin         Int      @default(25)
+  ageMax         Int      @default(64)
+  destinationUrl String?
+  publishFee     Float?
+  status         String   @default("draft") // draft | partial | active | failed
+  error          String?
+  createdAt      DateTime @default(now())
+
+  campaigns Campaign[]
+}
+
 /// An ad campaign created through AdPilot.
 model Campaign {
   id             String   @id @default(cuid())
   shop           String
   adAccountId    String
   adAccount      AdAccount @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+  funnelGroupId  String?
+  funnelGroup    FunnelGroup? @relation(fields: [funnelGroupId], references: [id], onDelete: SetNull)
+  funnelStage    String?  // TOF | MOF | BOF — set for funnel campaigns
   metaCampaignId String?  // Meta's campaign ID after publish
   metaAdSetId    String?
   metaAdId       String?
