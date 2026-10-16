@@ -85,6 +85,58 @@ AI_TOGETHER_MODEL="meta-llama/Llama-3.3-70B-Instruct-Turbo"
 AI_TOGETHER_BASE_URL="https://api.together.xyz/v1"
 ```
 
+## All supported provider setups (copy-paste)
+
+Every setup below is 4–5 env vars: `TYPE` + `KEY` + `MODEL` (+ `BASE_URL` for
+OpenAI-compatible endpoints), then add the slot name to `AI_PROVIDER_ORDER`.
+
+**OpenRouter** (one key, hundreds of models):
+
+```bash
+AI_PROVIDER_ORDER="openrouter"
+AI_OPENROUTER_TYPE="openai"
+AI_OPENROUTER_KEY="sk-or-…"
+AI_OPENROUTER_MODEL="meta-llama/llama-3.3-70b-instruct"
+AI_OPENROUTER_BASE_URL="https://openrouter.ai/api/v1"
+```
+
+**DeepSeek** (cheap, OpenAI-compatible):
+
+```bash
+AI_PROVIDER_ORDER="deepseek"
+AI_DEEPSEEK_TYPE="openai"
+AI_DEEPSEEK_KEY="sk-…"
+AI_DEEPSEEK_MODEL="deepseek-chat"
+AI_DEEPSEEK_BASE_URL="https://api.deepseek.com/v1"
+```
+
+**Azure OpenAI** — `MODEL` is your **deployment name**, `BASE_URL` is your
+resource endpoint + deployment path. Some Azure setups require `?api-version=`
+appended to the base URL; if calls fail with 404, add it:
+
+```bash
+AI_PROVIDER_ORDER="azure"
+AI_AZURE_TYPE="openai"
+AI_AZURE_KEY="…"
+AI_AZURE_MODEL="my-gpt4o-mini-deployment"
+AI_AZURE_BASE_URL="https://<resource>.openai.azure.com/openai/deployments/<deployment>?api-version=2024-10-01-preview"
+```
+
+**Self-hosted** (Ollama / vLLM / LM Studio — must be reachable over HTTPS):
+
+```bash
+AI_PROVIDER_ORDER="local"
+AI_LOCAL_TYPE="openai"
+AI_LOCAL_KEY="ollama"
+AI_LOCAL_MODEL="llama3.3"
+AI_LOCAL_BASE_URL="https://my-server.com/v1"
+```
+
+> **Not supported** by the env-key model: **AWS Bedrock** (it uses
+> request-signing auth instead of API keys) and **OAuth-only AI services**
+> (they need a browser consent flow, not a static key). Everything above that
+> accepts a static API key works.
+
 ## Where to set these (Railway)
 
 Railway dashboard → your AdPilot service → **Variables** → add each var →
@@ -110,3 +162,120 @@ usage, recent failures) and **AI Skills** (fee per skill).
 `AI_GENERATION_FEE` in `app/lib/pricing.ts` (default **$0.20** per generation,
 deducted from the merchant's wallet). Typical provider cost per caption is
 ~$0.01–0.03, so the margin funds the feature.
+
+---
+
+## AI Agents layer (Phase 1b)
+
+An **AI agent** = a named worker with:
+1. **Provider ref** — which AI serves it (must match a slot name in `AI_PROVIDER_ORDER`, e.g. `openai`, `groq`, `claude`).
+2. **Sectors** — which skills it handles: `caption`, `hashtag`, `ad_copy`, `audience`, or `all`. Comma-separated, e.g. `caption,hashtag`.
+3. **Working rules** — text extracted from a PDF you upload (cap 20,000 chars), prepended to every prompt as *"Follow these working rules: …"*.
+
+### Routing & fallback
+
+`generateForSector(sector, …)` (in `app/lib/agents.server.ts`):
+- Finds **enabled** agents whose sectors include the sector (or `all`), ordered by **priority ascending** (lower = tried first).
+- Each agent calls **its own provider** with its rules injected into the system prompt.
+- If an agent's provider fails (or isn't configured), the **next agent** is tried automatically.
+- All fail → `AI_ALL_AGENTS_FAILED`. No agents cover the sector → the caption generator falls back to plain provider order (backward compatible — the app works before you create any agent).
+
+### Managing agents
+
+`/app/admin` → **AI Agents** (owner-only, same `ADMIN_SHOP_DOMAIN` guard):
+- **Create**: name, provider (dropdown of configured providers), sectors checkboxes (incl. "All sectors"), priority, enabled.
+- **Rules PDF**: per-agent upload (PDF ≤ 5 MB) — text is extracted server-side and stored on the agent; the filename is shown once attached.
+- **Delete** agents you no longer need.
+
+Programmatic access lives in `app/lib/agents.server.ts`: `listAgents`, `getAgentsForSector`, `generateForSector`, `createAgent`, `setAgentRules`, `deleteAgent` — all take plain arguments, no app imports (portable module).
+
+### The 3 flexible topologies
+
+**1. One agent → all sectors** (simplest start)
+- Agent "Main" — provider `openai`, sectors `all`, priority 0, + your rules PDF.
+- Every generation flows through it.
+
+**2. Two agents → all sectors** (priority + fallback)
+- Agent "Primary" — provider `openai`, sectors `all`, priority 0.
+- Agent "Backup" — provider `groq`, sectors `all`, priority 1.
+- If OpenAI errors or rate-limits, Groq automatically takes over. Zero downtime.
+
+**3. Different agents per sector** (specialists)
+- Agent "Caption Pro" — provider `claude`, sectors `caption,hashtag`, priority 0, + caption rules PDF.
+- Agent "Ad Writer" — provider `openai`, sectors `ad_copy`, priority 0, + ad-copy rules PDF.
+- Agent "Audience Scout" — provider `groq`, sectors `audience`, priority 0.
+- Each sector gets the best model + its own rulebook. (Add a second agent on the same sector any time for fallback.)
+
+### Writing a good rules PDF
+
+Keep it short, imperative, and sector-specific. Plain text exports work best (Word/Google Docs → PDF). Example for a caption agent:
+
+```
+Caption Agent — Working Rules
+1. Always end with a clear call to action ("Shop now", "Comment YES").
+2. Never invent discounts, prices, or reviews — only use facts from the topic.
+3. Keep captions under 200 characters; max 2 emojis.
+4. Hashtags: 5-8, lowercase, no brand names of competitors.
+5. Tone: friendly and confident, never pushy.
+6. If the topic mentions a sale, say "limited time" without inventing an end date.
+```
+
+Upload it on the agent's row in `/app/admin` → **AI Agents**. The text is injected verbatim above the task prompt on every call.
+
+---
+
+## Main orchestrator agent
+
+One agent can be flagged **Main agent** (`isMainAgent`). It implicitly covers
+**ALL sectors** regardless of its `sectors` value, and is tried **after**
+specialized agents.
+
+**Routing order** in `generateForSector(sector)`:
+1. Enabled, active, specialized (non-main) agents covering the sector — priority ascending, each tried in turn, fallback on failure.
+2. The enabled main agent (handles the work itself — it has all skills).
+3. No main agent → legacy provider-order path (backward compatible).
+
+If several agents are flagged main, the **lowest priority wins** (the admin UI
+shows all flagged mains; keep only one to avoid confusion).
+
+**Example:**
+- Agent "Boss" — main, provider `openai`, sectors `all`, priority 0.
+  With no other agents, *everything* (captions, hashtags, ad copy, audiences)
+  goes through Boss.
+- You add "CaptionMaster" — specialized, provider `claude`, sectors
+  `caption`, priority 0, + caption rules PDF.
+  Now: **captions → CaptionMaster** (specialist first), **everything else →
+  Boss** (main catches the rest). If CaptionMaster's provider fails, Boss
+  takes the caption as fallback.
+
+Multi-sector fan-out: `generateForSectors(["caption","hashtag"], …)` routes
+each sector-part to its own specialized agent and returns per-sector results
+(sequential, to avoid rate-limit spikes).
+
+## Subscription rotation (monthly AI plans)
+
+Agents carry an optional subscription window:
+- `activeFrom` — agent becomes routable at this date (null = no restriction).
+- `expiresAt` — agent stops receiving work after this date (null = no restriction).
+
+Expired or not-yet-active agents are **silently skipped by routing** but stay
+visible in `/app/admin` → **AI Agents** with a status badge:
+`scheduled` (starts in future) · `active` · `expiring soon` (≤ 7 days left) ·
+`expired`.
+
+**Zero-downtime monthly rotation:**
+1. Create the new agent (new month's key/provider) with `activeFrom` = the
+   1st of next month, enabled. It shows `scheduled` until then.
+2. Set the old agent's `expiresAt` = end of this month. It shows
+   `expiring soon` during the last 7 days.
+3. On the 1st, routing flips to the new agent automatically — no deploy,
+   no downtime. Delete or disable the old agent whenever you like.
+
+## Agent workload & per-app stats
+
+`/app/admin` → **AI Agents** now includes:
+- **Agent workload** — per agent: tasks today / last 30 days, success vs
+  failed, last used (UTC). Sourced from `ActivityLog.agentName`.
+- **App × agent breakdown** — one row per app (`ActivityLog.app`,
+  default `"adpilot"`): which agents worked, task counts, revenue. Built for
+  the central AI Hub — more apps appear as rows with zero schema change.

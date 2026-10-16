@@ -1,6 +1,15 @@
 /**
  * Generic multi-provider AI layer for AdPilot (server-only).
  *
+ * PORTABILITY NOTE: this file, together with app/lib/agents.server.ts,
+ * app/lib/activity.server.ts, app/lib/ai-sectors.ts, app/lib/pdf-text.server.ts
+ * and the AiAgent/ActivityLog Prisma models, is a self-contained AI module
+ * with ZERO imports from app-specific code (no routes, wallet, compose,
+ * pricing, or shopify.server imports — callers pass shop/context as plain
+ * arguments). It is deliberately written this way so the owner can later
+ * extract it verbatim into a shared "AI Hub" package used by all of his
+ * apps; keep it that way when editing.
+ *
  * The owner can plug in ANY AI provider later without code changes — just env vars.
  * Providers are resolved from numbered slots (up to 5), tried in priority order,
  * with automatic fallback to the next provider on failure.
@@ -58,6 +67,8 @@ export interface CaptionResult {
   hashtags: string[];
   /** slot name that served this generation, e.g. "groq" */
   provider: string;
+  /** agent name when routed via the agent layer (undefined on legacy path) */
+  agent?: string;
 }
 
 const MAX_SLOTS = 5;
@@ -164,10 +175,11 @@ function normalizeResult(
   return { caption, hashtags, provider };
 }
 
-async function callOpenAI(
+async function callOpenAIText(
   cfg: AIProviderConfig,
-  input: CaptionInput,
-): Promise<CaptionResult> {
+  systemPrompt: string,
+  userPrompt: string,
+): Promise<string> {
   const res = await fetch(`${cfg.baseUrl}/chat/completions`, {
     method: "POST",
     headers: {
@@ -177,8 +189,8 @@ async function callOpenAI(
     body: JSON.stringify({
       model: cfg.model,
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: buildUserPrompt(input) },
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
       ],
       response_format: { type: "json_object" },
       temperature: 0.9,
@@ -192,14 +204,14 @@ async function callOpenAI(
   const data = (await res.json()) as {
     choices?: Array<{ message?: { content?: string } }>;
   };
-  const content = data.choices?.[0]?.message?.content ?? "";
-  return normalizeResult(extractJson(content), cfg.name);
+  return data.choices?.[0]?.message?.content ?? "";
 }
 
-async function callAnthropic(
+async function callAnthropicText(
   cfg: AIProviderConfig,
-  input: CaptionInput,
-): Promise<CaptionResult> {
+  systemPrompt: string,
+  userPrompt: string,
+): Promise<string> {
   const res = await fetch(ANTHROPIC_ENDPOINT, {
     method: "POST",
     headers: {
@@ -210,8 +222,8 @@ async function callAnthropic(
     body: JSON.stringify({
       model: cfg.model,
       max_tokens: 1024,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: buildUserPrompt(input) }],
+      system: systemPrompt,
+      messages: [{ role: "user", content: userPrompt }],
     }),
   });
   if (!res.ok) {
@@ -221,17 +233,78 @@ async function callAnthropic(
   const data = (await res.json()) as {
     content?: Array<{ type?: string; text?: string }>;
   };
+  return data.content?.find((b) => b.type === "text")?.text ?? "";
+}
+
+/**
+ * Generic provider call used by the agent layer (app/lib/agents.server.ts).
+ * Returns the model's raw text — callers parse it themselves.
+ * Never logs or returns the API key.
+ */
+export async function generateWithProvider(
+  cfg: AIProviderConfig,
+  systemPrompt: string,
+  userPrompt: string,
+): Promise<string> {
   const text =
-    data.content?.find((b) => b.type === "text")?.text ?? "";
+    cfg.type === "anthropic"
+      ? await callAnthropicText(cfg, systemPrompt, userPrompt)
+      : await callOpenAIText(cfg, systemPrompt, userPrompt);
+  if (!text.trim()) throw new Error(`Provider "${cfg.name}" returned empty text.`);
+  return text;
+}
+
+/** Find a configured provider by slot name (case-insensitive). */
+export function getProviderByName(name: string): AIProviderConfig | undefined {
+  const want = name.trim().toLowerCase();
+  return resolveProviders().find((p) => p.name === want);
+}
+
+async function callOpenAI(
+  cfg: AIProviderConfig,
+  input: CaptionInput,
+): Promise<CaptionResult> {
+  const content = await callOpenAIText(cfg, SYSTEM_PROMPT, buildUserPrompt(input));
+  return normalizeResult(extractJson(content), cfg.name);
+}
+
+async function callAnthropic(
+  cfg: AIProviderConfig,
+  input: CaptionInput,
+): Promise<CaptionResult> {
+  const text = await callAnthropicText(cfg, SYSTEM_PROMPT, buildUserPrompt(input));
   return normalizeResult(extractJson(text), cfg.name);
 }
 
 /**
- * Generate a caption, trying providers in AI_PROVIDER_ORDER with fallback.
- * Throws Error("AI_NOT_CONFIGURED: ...") when no provider has key+model.
- * Throws Error("AI_ALL_PROVIDERS_FAILED: ...") when every provider fails.
+ * Generate a caption. Routes through the agent layer first
+ * (app/lib/agents.server.ts): specialized agents for the "caption" sector
+ * are tried in priority order, then the main orchestrator agent (which
+ * covers all sectors). If NO agent exists at all, falls back to the legacy
+ * provider-order behavior — so the existing UI keeps working before any
+ * agent is created.
+ * Throws Error("AI_NOT_CONFIGURED: ...") / Error("AI_ALL_PROVIDERS_FAILED: ...")
+ * / Error("AI_ALL_AGENTS_FAILED: ...") as appropriate.
  */
 export async function generateCaption(input: CaptionInput): Promise<CaptionResult> {
+  // Dynamic import: agents.server.ts imports from this module, so a static
+  // import would create a module cycle. The agent layer stays optional.
+  const { getAgentsForSector, getMainAgent, generateForSector } = await import("./agents.server");
+  const [specialized, main] = await Promise.all([
+    getAgentsForSector("caption"),
+    getMainAgent(),
+  ]);
+  if (specialized.length > 0 || main) {
+    const { text, agent, provider } = await generateForSector("caption", {
+      systemPrompt: SYSTEM_PROMPT,
+      userPrompt: buildUserPrompt(input),
+    });
+    const result = normalizeResult(extractJson(text), provider);
+    console.log(`[adpilot ai] caption generated via agent "${agent}" (provider "${provider}")`);
+    return { ...result, agent };
+  }
+
+  // Legacy path: no agents configured — try providers in AI_PROVIDER_ORDER.
   const providers = resolveProviders();
   if (providers.length === 0) {
     throw new Error(

@@ -9,6 +9,13 @@
 
 import prisma from "../db.server";
 
+/**
+ * Owning app id for every ActivityLog row. Defined ONCE here — the portable
+ * AI module stamps it automatically. When this module moves into the shared
+ * AI Hub package, each app injects its own id instead of this constant.
+ */
+export const APP_NAME = "adpilot";
+
 export type ActivityAction =
   | "ai_generate"
   | "post_publish"
@@ -22,6 +29,10 @@ interface LogInput {
   action: ActivityAction;
   detail?: string;
   feeCharged?: number;
+  /** which AI agent served it (ai_generate only) */
+  agentName?: string;
+  /** owning app; defaults to APP_NAME */
+  app?: string;
 }
 
 // The generated Prisma client may lag behind schema.prisma in local dev
@@ -29,7 +40,14 @@ interface LogInput {
 // regenerates the client at Docker build time, where activityLog exists.
 interface ActivityLogDelegate {
   create: (args: {
-    data: { shop: string; action: string; detail?: string; feeCharged: number };
+    data: {
+      shop: string;
+      action: string;
+      detail?: string;
+      feeCharged: number;
+      agentName?: string;
+      app: string;
+    };
   }) => Promise<unknown>;
 }
 
@@ -39,13 +57,13 @@ function delegate(): ActivityLogDelegate | undefined {
 
 /** Record an activity row. Never throws — logs to console on failure. */
 export function logActivity(input: LogInput): void {
-  const { shop, action, detail, feeCharged = 0 } = input;
+  const { shop, action, detail, feeCharged = 0, agentName, app = APP_NAME } = input;
   const d = delegate();
   if (!d) {
     console.warn("[adpilot activity] activityLog model unavailable, skipping log");
     return;
   }
-  d.create({ data: { shop, action, detail, feeCharged } }).catch((e) => {
+  d.create({ data: { shop, action, detail, feeCharged, agentName, app } }).catch((e) => {
     console.error("[adpilot activity] log failed:", e);
   });
 }

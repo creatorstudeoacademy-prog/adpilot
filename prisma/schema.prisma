@@ -182,14 +182,44 @@ model WalletTransaction {
 
 /// Append-only log of billable/AI actions per shop — powers the admin report.
 /// action: ai_generate | post_publish | post_schedule | ad_publish | audience_create | wallet_topup
+/// agentName: which AI agent served it (ai_generate only; null otherwise).
+/// app: owning app id — forward-looking for the central AI Hub (multi-app).
 model ActivityLog {
   id         String   @id @default(cuid())
   shop       String
   action     String
   detail     String?
   feeCharged Float    @default(0)
+  agentName  String?
+  app        String   @default("adpilot")
   createdAt  DateTime @default(now())
 
   @@index([shop, createdAt])
   @@index([action, createdAt])
+  @@index([agentName, createdAt])
+}
+
+/// A named AI agent: provider ref + assigned sectors + working-rules text.
+/// Generation requests route by sector → agent (priority order) → provider,
+/// with fallback to the next agent on failure. A MAIN agent (isMainAgent)
+/// implicitly covers ALL sectors and is tried after specialized agents.
+/// activeFrom/expiresAt support monthly subscription rotation (null = no
+/// restriction; expired or not-yet-active agents are silently skipped).
+/// Part of the portable AI layer (see app/lib/agents.server.ts); the owner
+/// will extract this into a shared AI Hub package later.
+model AiAgent {
+  id            String    @id @default(cuid())
+  name          String
+  providerName  String    // must match a slot name in AI_PROVIDER_ORDER
+  sectors       String    @default("all") // comma-separated, e.g. "caption,hashtag" or "all"
+  rulesText     String?   // working-rules text extracted from uploaded PDF (cap 20000 chars)
+  rulesFileName String?
+  priority      Int       @default(0) // lower = tried first
+  enabled       Boolean   @default(true)
+  isMainAgent   Boolean   @default(false) // main orchestrator: covers all sectors; lowest priority wins if several flagged
+  activeFrom    DateTime? // subscription start; null = no restriction
+  expiresAt     DateTime? // subscription end; null = no restriction
+  createdAt     DateTime  @default(now())
+
+  @@index([enabled, priority])
 }

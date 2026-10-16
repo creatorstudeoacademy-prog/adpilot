@@ -67,8 +67,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     logActivity({
       shop,
       action: "ai_generate",
-      detail: `provider:${result.provider} platform:${platform} tone:${tone} topic:${topic.slice(0, 80)}`,
+      detail: `sector:caption provider:${result.provider}${result.agent ? ` agent:${result.agent}` : ""} platform:${platform} tone:${tone} topic:${topic.slice(0, 80)}`,
       feeCharged: AI_GENERATION_FEE,
+      agentName: result.agent,
     });
     return json({
       ok: true,

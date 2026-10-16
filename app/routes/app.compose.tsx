@@ -341,7 +341,7 @@ export default function ComposePage() {
                         disabled={aiBusy || !aiTopic.trim()}
                         fullWidth
                       >
-                        {aiBusy ? "Writing…" : "AI diye likhao ($0.20)"}
+                        {aiBusy ? "Writing…" : "Generate with AI ($0.20)"}
                       </Button>
                     </BlockStack>
                   </Card>
