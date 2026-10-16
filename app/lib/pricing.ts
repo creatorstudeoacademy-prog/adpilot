@@ -2,6 +2,9 @@
  * Shared pricing constants (safe to import from client components).
  */
 
+/** Flat fee per social post published (USD). Deducted from wallet on publish. */
+export const POST_PUBLISH_FEE = 0.5;
+
 /** Per-ad publish fees by campaign objective (USD). Deducted from wallet on publish. */
 export const OBJECTIVE_FEES: Record<string, number> = {
   AWARENESS: 2,
@@ -61,6 +64,8 @@ export function calculatePublishFee(
 
 /** Wallet topup packs: price charged -> credit added (bonus included). */
 export const TOPUP_PACKS = [
+  { price: 5, credit: 5, label: "$5", sublabel: "$5 value" },
+  { price: 10, credit: 10, label: "$10", sublabel: "$10 value" },
   { price: 30, credit: 30, label: "$30", sublabel: "$30 value" },
   { price: 90, credit: 100, label: "$90", sublabel: "$90 + $10 bonus = $100 value" },
   { price: 240, credit: 300, label: "$240", sublabel: "$240 + $60 bonus = $300 value" },

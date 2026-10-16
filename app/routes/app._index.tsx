@@ -64,6 +64,22 @@ export default function Dashboard() {
       }
     >
       <BlockStack gap="500">
+        <Card>
+          <InlineStack align="space-between" blockAlign="center">
+            <BlockStack gap="100">
+              <Text as="p" variant="bodyMd" tone="subdued">
+                Wallet balance — no monthly fees, pay only for what you use
+              </Text>
+              <Text as="p" variant="heading2xl">
+                ${walletBalance.toFixed(2)}
+              </Text>
+            </BlockStack>
+            <Button url="/app/wallet" variant="primary">
+              Top up wallet
+            </Button>
+          </InlineStack>
+        </Card>
+
         {accountCount === 0 && (
           <Card>
             <BlockStack gap="400">

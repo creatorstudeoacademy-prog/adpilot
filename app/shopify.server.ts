@@ -2,7 +2,6 @@ import "@shopify/shopify-app-remix/adapters/node";
 import {
   ApiVersion,
   AppDistribution,
-  BillingInterval,
   shopifyApp,
 } from "@shopify/shopify-app-remix/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
@@ -10,12 +9,10 @@ import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prism
 import prisma from "./db.server";
 
 /**
- * Billing plan identifiers.
- * The AdPilot Pro plan is created on demand via the Billing API (no Partner
- * Dashboard setup needed). `isTest` is enabled outside production so
- * review/dev charges never bill real money.
+ * AdPilot is 100% usage-based: free to install, no monthly subscription.
+ * All features are pay-per-use via wallet topups (social post $0.50/publish,
+ * ad publish fees by objective). No billing plans are configured.
  */
-export const PRO_PLAN = "adpilot-pro";
 
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
@@ -26,18 +23,6 @@ const shopify = shopifyApp({
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),
   distribution: AppDistribution.AppStore,
-  billing: {
-    [PRO_PLAN]: {
-      lineItems: [
-        {
-          amount: 19.99,
-          currencyCode: "USD",
-          interval: BillingInterval.Every30Days,
-        },
-      ],
-      trialDays: 7,
-    },
-  },
   future: {
     unstable_newEmbeddedAuthStrategy: true,
     expiringOfflineAccessTokens: true,

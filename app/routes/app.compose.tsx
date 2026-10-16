@@ -28,6 +28,8 @@ import {
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { publishToPlatforms } from "../lib/meta.server";
+import { deduct, getWallet, refund } from "../lib/wallet.server";
+import { POST_PUBLISH_FEE } from "../lib/pricing";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -37,6 +39,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     orderBy: { createdAt: "desc" },
   });
 
+  const wallet = await prisma.wallet.findUnique({
+    where: { shop: session.shop },
+  });
+
   return json({
     accounts: accounts.map((a) => ({
       id: a.id,
@@ -44,6 +50,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       platform: a.platform,
       instagramId: a.instagramId,
     })),
+    walletBalance: wallet?.balance ?? 0,
   });
 };
 
@@ -91,7 +98,36 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   const mediaUrls = mediaUrl ? [mediaUrl] : [];
 
+  // Wallet check: $0.50 per post publish (scheduled posts are charged now,
+  // at schedule time).
+  const wallet = await getWallet(shop);
+  if (wallet.balance < POST_PUBLISH_FEE) {
+    return json<ComposeActionData>(
+      {
+        ok: false,
+        error: `Insufficient wallet balance ($${wallet.balance.toFixed(2)}). Publishing costs $${POST_PUBLISH_FEE.toFixed(2)} per post — please top up.`,
+      },
+      { status: 402 },
+    );
+  }
+
   if (publishNow) {
+    // Create the record first so we have an id for the transaction ref.
+    const post = await prisma.scheduledPost.create({
+      data: {
+        shop,
+        socialAccountId: account.id,
+        content,
+        mediaUrls: JSON.stringify(mediaUrls),
+        mediaType,
+        platforms: JSON.stringify(platforms),
+        status: "draft",
+      },
+    });
+
+    // Deduct BEFORE calling Meta; refund if Meta fails.
+    await deduct(shop, POST_PUBLISH_FEE, `Post publish fee`, post.id);
+
     try {
       await publishToPlatforms({
         accessToken: account.accessToken,
@@ -102,32 +138,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         mediaType,
         platforms,
       });
-      await prisma.scheduledPost.create({
-        data: {
-          shop,
-          socialAccountId: account.id,
-          content,
-          mediaUrls: JSON.stringify(mediaUrls),
-          mediaType,
-          platforms: JSON.stringify(platforms),
-          status: "published",
-          publishedAt: new Date(),
-        },
+      await prisma.scheduledPost.update({
+        where: { id: post.id },
+        data: { status: "published", publishedAt: new Date() },
       });
       return json<ComposeActionData>({ ok: true, published: true });
     } catch (e) {
       const message = e instanceof Error ? e.message : "Publishing failed.";
-      await prisma.scheduledPost.create({
-        data: {
-          shop,
-          socialAccountId: account.id,
-          content,
-          mediaUrls: JSON.stringify(mediaUrls),
-          mediaType,
-          platforms: JSON.stringify(platforms),
-          status: "failed",
-          error: message,
-        },
+      await refund(shop, POST_PUBLISH_FEE, `Refund: post publish failed`, post.id);
+      await prisma.scheduledPost.update({
+        where: { id: post.id },
+        data: { status: "failed", error: message },
       });
       return json<ComposeActionData>({ ok: false, error: message }, { status: 500 });
     }
@@ -148,7 +169,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
   }
 
-  await prisma.scheduledPost.create({
+  const post = await prisma.scheduledPost.create({
     data: {
       shop,
       socialAccountId: account.id,
@@ -161,11 +182,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     },
   });
 
+  // Charge the publish fee now, at schedule time.
+  await deduct(shop, POST_PUBLISH_FEE, `Scheduled post fee`, post.id);
+
   return redirect("/app/scheduled");
 };
 
 export default function ComposePage() {
-  const { accounts } = useLoaderData<typeof loader>();
+  const { accounts, walletBalance } = useLoaderData<typeof loader>();
   const actionData = useActionData<ComposeActionData>();
   const navigation = useNavigation();
   const submit = useSubmit();
@@ -325,8 +349,12 @@ export default function ComposePage() {
                         disabled={busy}
                         fullWidth
                       >
-                        {publishNow ? "Publish now" : "Schedule post"}
+                        {publishNow ? "Publish now ($0.50)" : "Schedule post ($0.50)"}
                       </Button>
+                      <Text as="p" variant="bodySm" tone="subdued" alignment="center">
+                        $0.50 will be deducted from your wallet (balance: $
+                        {walletBalance.toFixed(2)}).
+                      </Text>
                     </BlockStack>
                   </Card>
                 </BlockStack>
