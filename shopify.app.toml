@@ -27,23 +27,3 @@ api_version = "2026-01"
   [[webhooks.subscriptions]]
   topics = ["app/scopes_update"]
   uri = "/webhooks/app/scopes_update"
-
-  # Mandatory GDPR compliance webhooks for public apps.
-  # See: https://shopify.dev/docs/apps/build/privacy-law-compliance
-  # The app stores no customer PII (shop-level bar config only), so these
-  # handlers acknowledge receipt. They must exist and return 200.
-
-  # Handled by: app/routes/webhooks.customers.data_request.tsx
-  [[webhooks.subscriptions]]
-  topics = ["customers/data_request"]
-  uri = "/webhooks/customers/data_request"
-
-  # Handled by: app/routes/webhooks.customers.redact.tsx
-  [[webhooks.subscriptions]]
-  topics = ["customers/redact"]
-  uri = "/webhooks/customers/redact"
-
-  # Handled by: app/routes/webhooks.shop.redact.tsx
-  [[webhooks.subscriptions]]
-  topics = ["shop/redact"]
-  uri = "/webhooks/shop/redact"
