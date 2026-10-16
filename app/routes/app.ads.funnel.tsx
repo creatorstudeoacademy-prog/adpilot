@@ -24,7 +24,7 @@ import { useState } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { createFullFunnel } from "../lib/meta-ads.server";
-import { deduct, getWallet, refund } from "../lib/wallet.server";
+import { deduct, getWallet, isFreeShop, refund } from "../lib/wallet.server";
 import { logActivity } from "../lib/activity.server";
 import {
   AUDIENCE_FEE,
@@ -153,7 +153,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (!page) return json({ ok: false, error: "Connect a Facebook Page first." });
 
   const wallet = await getWallet(shop);
-  if (wallet.balance < fee) {
+  // Free shops (owner's own stores) skip the balance check.
+  if (!isFreeShop(shop) && wallet.balance < fee) {
     return redirect("/app/wallet?need=" + fee.toFixed(2));
   }
 
@@ -285,7 +286,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       shop,
       action: "ad_publish",
       detail: `funnel:${funnel.id} stages:${succeeded}/3 fee:${fee.toFixed(2)}`,
-      feeCharged: fee,
+      feeCharged: isFreeShop(shop) ? 0 : fee,
     });
 
     return redirect(`/app/ads/campaigns?funnel=${funnel.id}`);

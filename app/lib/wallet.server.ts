@@ -9,6 +9,35 @@ import { OBJECTIVE_FEES } from "./pricing";
 
 export { OBJECTIVE_FEES };
 
+/**
+ * Owner's own stores use the app completely free — no wallet charges ever.
+ * FREE_SHOP_DOMAINS: comma-separated myshopify domains, e.g.
+ * "creator-studio-store.myshopify.com,other-store.myshopify.com".
+ * Unset or empty = nobody is free (default: every merchant pays normally).
+ */
+function getFreeShopDomains(): string[] {
+  const raw = process.env.FREE_SHOP_DOMAINS ?? "";
+  return raw
+    .split(",")
+    .map((d) => normalizeShopDomain(d))
+    .filter(Boolean);
+}
+
+function normalizeShopDomain(shop: string): string {
+  return (shop ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/\/.*$/, "");
+}
+
+/** True when this shop is on the owner's free list (never charged, never blocked). */
+export function isFreeShop(shop: string): boolean {
+  const normalized = normalizeShopDomain(shop);
+  if (!normalized) return false;
+  return getFreeShopDomains().includes(normalized);
+}
+
 export async function getWallet(shop: string) {
   let wallet = await prisma.wallet.findUnique({ where: { shop } });
   if (!wallet) {
@@ -56,6 +85,21 @@ export async function topup(
 export async function deduct(shop: string, amount: number, description: string, metaRef?: string) {
   if (amount <= 0) throw new Error("Deduction amount must be positive.");
   const wallet = await getWallet(shop);
+  if (isFreeShop(shop)) {
+    // Owner's own store: bypass — no deduction, no balance requirement.
+    // Logged distinctly with amount 0 so the ledger stays honest.
+    await prisma.walletTransaction.create({
+      data: {
+        shop,
+        walletId: wallet.id,
+        amount: 0,
+        type: "ad_spend",
+        description: `free-shop (waived $${amount.toFixed(2)}): ${description}`,
+        metaRef,
+      },
+    });
+    return wallet;
+  }
   if (wallet.balance < amount) {
     throw new Error(
       `Insufficient wallet balance ($${wallet.balance.toFixed(2)}). Please top up at least $${amount.toFixed(2)}.`,
@@ -81,6 +125,11 @@ export async function deduct(shop: string, amount: number, description: string, 
 /** Refund a previous deduction (e.g. when Meta publish fails after deduct). */
 export async function refund(shop: string, amount: number, description: string, metaRef?: string) {
   const wallet = await getWallet(shop);
+  if (isFreeShop(shop)) {
+    // Nothing was ever charged for a free shop — refunding would create
+    // phantom credit, so this is a no-op.
+    return wallet;
+  }
   const updated = await prisma.wallet.update({
     where: { id: wallet.id },
     data: { balance: { increment: amount } },

@@ -28,7 +28,7 @@ import {
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { publishToPlatforms } from "../lib/meta.server";
-import { deduct, getWallet, refund } from "../lib/wallet.server";
+import { deduct, getWallet, isFreeShop, refund } from "../lib/wallet.server";
 import { logActivity } from "../lib/activity.server";
 import { POST_PUBLISH_FEE } from "../lib/pricing";
 
@@ -100,9 +100,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const mediaUrls = mediaUrl ? [mediaUrl] : [];
 
   // Wallet check: $0.50 per post publish (scheduled posts are charged now,
-  // at schedule time).
+  // at schedule time). Free shops (owner's own stores) skip the check.
   const wallet = await getWallet(shop);
-  if (wallet.balance < POST_PUBLISH_FEE) {
+  if (!isFreeShop(shop) && wallet.balance < POST_PUBLISH_FEE) {
     return json<ComposeActionData>(
       {
         ok: false,
@@ -147,7 +147,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         shop,
         action: "post_publish",
         detail: `post:${post.id} now platforms:${platforms.join(",")}`,
-        feeCharged: POST_PUBLISH_FEE,
+        feeCharged: isFreeShop(shop) ? 0 : POST_PUBLISH_FEE,
       });
       return json<ComposeActionData>({ ok: true, published: true });
     } catch (e) {
@@ -195,7 +195,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     shop,
     action: "post_schedule",
     detail: `post:${post.id} at:${scheduledAt.toISOString()} platforms:${platforms.join(",")}`,
-    feeCharged: POST_PUBLISH_FEE,
+    feeCharged: isFreeShop(shop) ? 0 : POST_PUBLISH_FEE,
   });
 
   return redirect("/app/scheduled");

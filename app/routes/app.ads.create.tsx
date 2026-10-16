@@ -27,7 +27,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { OBJECTIVES } from "../lib/meta-ads";
 import { publishFullCampaign } from "../lib/meta-ads.server";
-import { deduct, getWallet, refund } from "../lib/wallet.server";
+import { deduct, getWallet, isFreeShop, refund } from "../lib/wallet.server";
 import { logActivity } from "../lib/activity.server";
 import {
   OBJECTIVE_FEES,
@@ -188,8 +188,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   // Wallet check happens before touching Meta.
   // Fee = base by objective + $1.50 per extra ad set + $1 per extra creative.
   // The ad budget itself is billed by Meta directly to the user's ad account.
+  // Free shops (owner's own stores) skip the balance check.
   const wallet = await getWallet(shop);
-  if (wallet.balance < fee.total) {
+  if (!isFreeShop(shop) && wallet.balance < fee.total) {
     return redirect("/app/wallet?need=" + fee.total.toFixed(2));
   }
 
@@ -257,7 +258,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       shop,
       action: "ad_publish",
       detail: `campaign:${campaign.id} objective:${objective} fee:${fee.total.toFixed(2)}`,
-      feeCharged: fee.total,
+      feeCharged: isFreeShop(shop) ? 0 : fee.total,
     });
 
     return redirect("/app/ads/campaigns?published=1");

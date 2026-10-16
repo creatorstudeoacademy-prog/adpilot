@@ -2,7 +2,7 @@ import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 
 import { authenticate } from "../shopify.server";
-import { deduct, getWallet, refund } from "../lib/wallet.server";
+import { deduct, getWallet, isFreeShop, refund } from "../lib/wallet.server";
 import { AI_GENERATION_FEE } from "../lib/pricing";
 import { generateCaption, listProviders } from "../lib/ai.server";
 import { logActivity } from "../lib/activity.server";
@@ -49,8 +49,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   // Wallet check + deduct BEFORE calling the AI (same pattern as post publish).
+  // Free shops (owner's own stores) skip the balance check entirely.
   const wallet = await getWallet(shop);
-  if (wallet.balance < AI_GENERATION_FEE) {
+  if (!isFreeShop(shop) && wallet.balance < AI_GENERATION_FEE) {
     return json(
       {
         ok: false,
@@ -68,7 +69,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       shop,
       action: "ai_generate",
       detail: `sector:caption provider:${result.provider}${result.agent ? ` agent:${result.agent}` : ""} platform:${platform} tone:${tone} topic:${topic.slice(0, 80)}`,
-      feeCharged: AI_GENERATION_FEE,
+      feeCharged: isFreeShop(shop) ? 0 : AI_GENERATION_FEE,
       agentName: result.agent,
     });
     return json({
