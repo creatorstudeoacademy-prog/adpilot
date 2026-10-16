@@ -25,6 +25,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { createFullFunnel } from "../lib/meta-ads.server";
 import { deduct, getWallet, refund } from "../lib/wallet.server";
+import { logActivity } from "../lib/activity.server";
 import {
   AUDIENCE_FEE,
   FUNNEL_AUDIENCE_COUNT,
@@ -279,6 +280,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         error: "Meta publish failed for all 3 stages. Your wallet was refunded.",
       });
     }
+
+    logActivity({
+      shop,
+      action: "ad_publish",
+      detail: `funnel:${funnel.id} stages:${succeeded}/3 fee:${fee.toFixed(2)}`,
+      feeCharged: fee,
+    });
 
     return redirect(`/app/ads/campaigns?funnel=${funnel.id}`);
   } catch (e) {

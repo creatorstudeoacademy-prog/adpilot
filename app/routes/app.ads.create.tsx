@@ -28,6 +28,7 @@ import prisma from "../db.server";
 import { OBJECTIVES } from "../lib/meta-ads";
 import { publishFullCampaign } from "../lib/meta-ads.server";
 import { deduct, getWallet, refund } from "../lib/wallet.server";
+import { logActivity } from "../lib/activity.server";
 import {
   OBJECTIVE_FEES,
   OBJECTIVE_FEE_LABELS,
@@ -251,6 +252,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         metaAdSetId: JSON.stringify(result.adSetIds),
         metaAdId: JSON.stringify(result.adIds),
       },
+    });
+    logActivity({
+      shop,
+      action: "ad_publish",
+      detail: `campaign:${campaign.id} objective:${objective} fee:${fee.total.toFixed(2)}`,
+      feeCharged: fee.total,
     });
 
     return redirect("/app/ads/campaigns?published=1");

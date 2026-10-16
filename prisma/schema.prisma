@@ -179,3 +179,17 @@ model WalletTransaction {
   metaRef     String?  // reference to campaign or charge ID
   createdAt   DateTime @default(now())
 }
+
+/// Append-only log of billable/AI actions per shop — powers the admin report.
+/// action: ai_generate | post_publish | post_schedule | ad_publish | audience_create | wallet_topup
+model ActivityLog {
+  id         String   @id @default(cuid())
+  shop       String
+  action     String
+  detail     String?
+  feeCharged Float    @default(0)
+  createdAt  DateTime @default(now())
+
+  @@index([shop, createdAt])
+  @@index([action, createdAt])
+}

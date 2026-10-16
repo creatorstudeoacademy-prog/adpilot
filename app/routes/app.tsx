@@ -11,13 +11,17 @@ import { authenticate } from "../shopify.server";
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
+  const adminShop = (process.env.ADMIN_SHOP_DOMAIN ?? "").trim();
 
-  return json({ apiKey: process.env.SHOPIFY_API_KEY || "" });
+  return json({
+    apiKey: process.env.SHOPIFY_API_KEY || "",
+    isAdmin: Boolean(adminShop) && session.shop === adminShop,
+  });
 };
 
 export default function App() {
-  const { apiKey } = useLoaderData<typeof loader>();
+  const { apiKey, isAdmin } = useLoaderData<typeof loader>();
 
   return (
     <AppProvider isEmbeddedApp apiKey={apiKey}>
@@ -33,6 +37,7 @@ export default function App() {
         <Link to="/app/ads/audiences">Audiences</Link>
         <Link to="/app/wallet">Wallet</Link>
         <Link to="/app/billing">Pricing</Link>
+        {isAdmin && <Link to="/app/admin">AI Report</Link>}
       </NavMenu>
       <Outlet />
     </AppProvider>

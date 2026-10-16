@@ -34,6 +34,7 @@ import {
   getAdPixels,
 } from "../lib/meta-ads.server";
 import { deduct, getWallet, refund } from "../lib/wallet.server";
+import { logActivity } from "../lib/activity.server";
 import {
   LOOKALIKE_AUDIENCE_FEE,
   STANDALONE_AUDIENCE_FEE,
@@ -272,6 +273,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     await prisma.audience.update({
       where: { id: audience.id },
       data: { metaAudienceId: metaId, subtype, status: "active" },
+    });
+    logActivity({
+      shop,
+      action: "audience_create",
+      detail: `audience:${audience.id} type:${type} name:${name} fee:${fee.toFixed(2)}`,
+      feeCharged: fee,
     });
 
     return redirect("/app/ads/audiences?created=1");

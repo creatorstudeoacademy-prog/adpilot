@@ -29,6 +29,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { publishToPlatforms } from "../lib/meta.server";
 import { deduct, getWallet, refund } from "../lib/wallet.server";
+import { logActivity } from "../lib/activity.server";
 import { POST_PUBLISH_FEE } from "../lib/pricing";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -142,6 +143,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         where: { id: post.id },
         data: { status: "published", publishedAt: new Date() },
       });
+      logActivity({
+        shop,
+        action: "post_publish",
+        detail: `post:${post.id} now platforms:${platforms.join(",")}`,
+        feeCharged: POST_PUBLISH_FEE,
+      });
       return json<ComposeActionData>({ ok: true, published: true });
     } catch (e) {
       const message = e instanceof Error ? e.message : "Publishing failed.";
@@ -184,6 +191,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   // Charge the publish fee now, at schedule time.
   await deduct(shop, POST_PUBLISH_FEE, `Scheduled post fee`, post.id);
+  logActivity({
+    shop,
+    action: "post_schedule",
+    detail: `post:${post.id} at:${scheduledAt.toISOString()} platforms:${platforms.join(",")}`,
+    feeCharged: POST_PUBLISH_FEE,
+  });
 
   return redirect("/app/scheduled");
 };
@@ -202,6 +215,51 @@ export default function ComposePage() {
   const [platforms, setPlatforms] = useState<string[]>(["facebook"]);
   const [publishNow, setPublishNow] = useState(true);
   const [scheduledAt, setScheduledAt] = useState("");
+
+  // AI caption generator state
+  const [aiTopic, setAiTopic] = useState("");
+  const [aiTone, setAiTone] = useState("Professional");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiError, setAiError] = useState("");
+
+  const handleAiGenerate = async () => {
+    if (!aiTopic.trim() || aiBusy) return;
+    setAiBusy(true);
+    setAiError("");
+    try {
+      const res = await fetch("/api/ai/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic: aiTopic.trim(),
+          platform: platforms[0] ?? "facebook",
+          tone: aiTone,
+        }),
+      });
+      const data = (await res.json()) as {
+        ok: boolean;
+        caption?: string;
+        hashtags?: string[];
+        message?: string;
+        error?: string;
+      };
+      if (!data.ok) {
+        setAiError(
+          data.error === "AI_NOT_CONFIGURED"
+            ? "AI is not configured yet — ask the app owner to add AI provider keys."
+            : data.message || "AI generation failed. Please try again.",
+        );
+        return;
+      }
+      const tags = (data.hashtags ?? []).map((h) => `#${h}`).join(" ");
+      const generated = tags ? `${data.caption}\n\n${tags}` : (data.caption ?? "");
+      setContent(generated);
+    } catch {
+      setAiError("Could not reach the AI service. Please try again.");
+    } finally {
+      setAiBusy(false);
+    }
+  };
 
   const selectedAccount = accounts.find((a) => a.id === accountId);
   const instagramAvailable = Boolean(selectedAccount?.instagramId);
@@ -247,6 +305,46 @@ export default function ComposePage() {
             <Layout>
               <Layout.Section>
                 <BlockStack gap="500">
+                  <Card>
+                    <BlockStack gap="300">
+                      <Text as="h2" variant="headingMd">
+                        ✨ AI caption generator
+                      </Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Describe your post and let AI write the caption. You can
+                        edit it before publishing. $0.20 per generation.
+                      </Text>
+                      <FormLayout>
+                        <TextField
+                          label="What is the post about?"
+                          value={aiTopic}
+                          onChange={setAiTopic}
+                          placeholder="e.g. new summer dress collection, 20% launch offer"
+                          autoComplete="off"
+                        />
+                        <Select
+                          label="Tone"
+                          options={[
+                            { label: "Professional", value: "Professional" },
+                            { label: "Funny", value: "Funny" },
+                            { label: "Casual", value: "Casual" },
+                          ]}
+                          value={aiTone}
+                          onChange={setAiTone}
+                        />
+                      </FormLayout>
+                      {aiError && <Banner tone="critical">{aiError}</Banner>}
+                      <Button
+                        variant="secondary"
+                        onClick={handleAiGenerate}
+                        loading={aiBusy}
+                        disabled={aiBusy || !aiTopic.trim()}
+                        fullWidth
+                      >
+                        {aiBusy ? "Writing…" : "AI diye likhao ($0.20)"}
+                      </Button>
+                    </BlockStack>
+                  </Card>
                   <Card>
                     <BlockStack gap="400">
                       <FormLayout>

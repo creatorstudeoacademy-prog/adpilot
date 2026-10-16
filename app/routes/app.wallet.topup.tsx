@@ -3,6 +3,7 @@ import { json, redirect } from "@remix-run/node";
 
 import { authenticate } from "../shopify.server";
 import { topup } from "../lib/wallet.server";
+import { logActivity } from "../lib/activity.server";
 import { TOPUP_PACKS } from "../lib/pricing";
 
 /**
@@ -49,6 +50,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           chargeId,
           bonus,
         );
+        logActivity({
+          shop,
+          action: "wallet_topup",
+          detail: `pack:$${pack.price} credit:$${pack.credit} charge:${chargeId}`,
+          feeCharged: pack.price,
+        });
       }
       return redirect("/app/wallet?topped=1");
     }

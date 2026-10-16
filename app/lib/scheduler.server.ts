@@ -12,6 +12,7 @@
 
 import prisma from "../db.server";
 import { publishToPlatforms } from "./meta.server";
+import { logActivity } from "./activity.server";
 
 export interface DuePassResult {
   published: number;
@@ -60,6 +61,12 @@ export async function runDuePostsPass(): Promise<DuePassResult> {
       await prisma.scheduledPost.update({
         where: { id: post.id },
         data: { status: "published", publishedAt: new Date(), error: null },
+      });
+      logActivity({
+        shop: post.shop,
+        action: "post_publish",
+        detail: `post:${post.id} via:worker platforms:${parseJsonArray(post.platforms).join(",")}`,
+        feeCharged: 0, // fee was already charged (and logged) at schedule time
       });
       result.published += 1;
     } catch (e) {
