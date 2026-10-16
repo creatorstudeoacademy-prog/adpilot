@@ -32,6 +32,7 @@ import {
 } from "../lib/ai-providers.server";
 import {
   SECTORS,
+  SECTOR_LABELS,
 } from "../lib/ai-sectors";
 import {
   createAgent,
@@ -746,7 +747,7 @@ function AgentsSection({
                   title="Sectors"
                   choices={[
                     { label: "All sectors", value: "all" },
-                    ...SECTORS.map((s) => ({ label: s, value: s })),
+                    ...SECTORS.map((s) => ({ label: SECTOR_LABELS[s], value: s })),
                   ]}
                   selected={sectors}
                   onChange={setSectors}
