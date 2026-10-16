@@ -246,8 +246,8 @@ export default function ComposePage() {
       if (!data.ok) {
         setAiError(
           data.error === "AI_NOT_CONFIGURED"
-            ? "AI is not configured yet — ask the app owner to add AI provider keys."
-            : data.message || "AI generation failed. Please try again.",
+            ? "Caption writer is unavailable right now — please try again later."
+            : data.message || "Caption writing failed. Please try again.",
         );
         return;
       }
@@ -255,7 +255,7 @@ export default function ComposePage() {
       const generated = tags ? `${data.caption}\n\n${tags}` : (data.caption ?? "");
       setContent(generated);
     } catch {
-      setAiError("Could not reach the AI service. Please try again.");
+      setAiError("Could not reach the caption service. Please try again.");
     } finally {
       setAiBusy(false);
     }
@@ -308,11 +308,12 @@ export default function ComposePage() {
                   <Card>
                     <BlockStack gap="300">
                       <Text as="h2" variant="headingMd">
-                        ✨ AI caption generator
+                        ✨ Caption writer
                       </Text>
                       <Text as="p" variant="bodySm" tone="subdued">
-                        Describe your post and let AI write the caption. You can
-                        edit it before publishing. $0.20 per generation.
+                        Describe your post and get a ready-to-post caption +
+                        hashtags. You can edit it before publishing. $0.20 per
+                        generation.
                       </Text>
                       <FormLayout>
                         <TextField
@@ -341,7 +342,7 @@ export default function ComposePage() {
                         disabled={aiBusy || !aiTopic.trim()}
                         fullWidth
                       >
-                        {aiBusy ? "Writing…" : "Generate with AI ($0.20)"}
+                        {aiBusy ? "Writing…" : "Write my caption ($0.20)"}
                       </Button>
                     </BlockStack>
                   </Card>
