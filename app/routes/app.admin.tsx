@@ -440,10 +440,10 @@ function ProvidersSection({
               <InlineStack gap="300" blockAlign="center">
                 <Checkbox
                   label="Enabled"
-                  name="enabled"
                   checked={pEnabled}
                   onChange={setPEnabled}
                 />
+                <input type="hidden" name="enabled" value={pEnabled ? "on" : "off"} />
                 <Button submit>Add provider</Button>
               </InlineStack>
             </BlockStack>
@@ -639,10 +639,10 @@ function ProviderEditForm({
             <InlineStack gap="300" blockAlign="center">
               <Checkbox
                 label="Enabled"
-                name="enabled"
                 checked={eEnabled}
                 onChange={setEEnabled}
               />
+              <input type="hidden" name="enabled" value={eEnabled ? "on" : "off"} />
               <Button submit>Save changes</Button>
               <Button onClick={onCancel}>Cancel</Button>
             </InlineStack>
@@ -756,17 +756,17 @@ function AgentsSection({
                 ))}
                 <Checkbox
                   label="Enabled"
-                  name="enabled"
                   checked={enabled}
                   onChange={setEnabled}
                 />
+                <input type="hidden" name="enabled" value={enabled ? "on" : "off"} />
                 <Checkbox
                   label="Main agent"
-                  name="isMainAgent"
                   checked={isMain}
                   onChange={setIsMain}
                   helpText="Main agent handles any sector no specialized agent covers. If several are flagged, the lowest priority wins."
                 />
+                <input type="hidden" name="isMainAgent" value={isMain ? "on" : "off"} />
                 {actionError && (
                   <Text as="p" variant="bodySm" tone="critical">
                     {actionError}
