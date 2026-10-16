@@ -9,8 +9,8 @@ import "@shopify/shopify-app-remix/adapters/node";
 import { shopifyApp, BillingInterval, AppDistribution, ApiVersion, boundary } from "@shopify/shopify-app-remix/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import { PrismaClient } from "@prisma/client";
-import { Page, Layout, BlockStack, Banner, Grid, Card, Text, Badge, List, Button, FormLayout, Checkbox, TextField, InlineStack, Divider, AppProvider } from "@shopify/polaris";
-import { useState, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { Page, Layout, BlockStack, Card, Text, DataTable, EmptyState, InlineStack, Button, Badge, Banner, Grid, List, FormLayout, Checkbox, TextField, Divider, AppProvider } from "@shopify/polaris";
 import { AppProvider as AppProvider$1 } from "@shopify/shopify-app-remix/react";
 import { NavMenu } from "@shopify/app-bridge-react";
 const ABORT_DELAY = 5e3;
@@ -168,7 +168,7 @@ shopify.unauthenticated;
 const login = shopify.login;
 shopify.registerWebhooks;
 shopify.sessionStorage;
-const action$6 = async ({ request }) => {
+const action$7 = async ({ request }) => {
   var _a2;
   const { shop, topic, payload } = await authenticate.webhook(request);
   console.log(
@@ -178,9 +178,9 @@ const action$6 = async ({ request }) => {
 };
 const route1 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  action: action$6
+  action: action$7
 }, Symbol.toStringTag, { value: "Module" }));
-const action$5 = async ({ request }) => {
+const action$6 = async ({ request }) => {
   const { payload, session, topic } = await authenticate.webhook(request);
   console.log(`Received ${topic} webhook for ${payload.shop_domain}`);
   const current = payload.current;
@@ -194,9 +194,9 @@ const action$5 = async ({ request }) => {
 };
 const route2 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  action: action$5
+  action: action$6
 }, Symbol.toStringTag, { value: "Module" }));
-const action$4 = async ({ request }) => {
+const action$5 = async ({ request }) => {
   var _a2;
   const { shop, topic, payload } = await authenticate.webhook(request);
   console.log(
@@ -206,9 +206,9 @@ const action$4 = async ({ request }) => {
 };
 const route3 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  action: action$4
+  action: action$5
 }, Symbol.toStringTag, { value: "Module" }));
-const action$3 = async ({ request }) => {
+const action$4 = async ({ request }) => {
   const { shop, session, topic } = await authenticate.webhook(request);
   console.log(`Received ${topic} webhook for ${shop}`);
   if (session) {
@@ -218,9 +218,9 @@ const action$3 = async ({ request }) => {
 };
 const route4 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  action: action$3
+  action: action$4
 }, Symbol.toStringTag, { value: "Module" }));
-const action$2 = async ({ request }) => {
+const action$3 = async ({ request }) => {
   const { shop, topic, payload } = await authenticate.webhook(request);
   console.log(
     `Received ${topic} webhook for ${shop} (shop_id ${payload.shop_id ?? "unknown"}) — deleting sessions.`
@@ -230,7 +230,267 @@ const action$2 = async ({ request }) => {
 };
 const route5 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  action: action$2
+  action: action$3
+}, Symbol.toStringTag, { value: "Module" }));
+const eventsByShop = /* @__PURE__ */ new Map();
+const MAX_EVENTS = 100;
+function getRecentEvents(shop) {
+  return eventsByShop.get(shop) ?? [];
+}
+const action$2 = async ({ request }) => {
+  if (request.method !== "POST") {
+    return json({ ok: false }, { status: 405 });
+  }
+  try {
+    const body = await request.json();
+    const shop = String(body.shop ?? "").trim();
+    const event = String(body.event ?? "").trim();
+    const pixel = String(body.pixel ?? "").trim();
+    if (!shop || !event || !pixel) {
+      return json({ ok: false }, { status: 400 });
+    }
+    const entry2 = {
+      shop,
+      event,
+      pixel,
+      page: String(body.page ?? ""),
+      timestamp: Date.now()
+    };
+    const list = eventsByShop.get(shop) ?? [];
+    list.unshift(entry2);
+    eventsByShop.set(shop, list.slice(0, MAX_EVENTS));
+    return json({ ok: true });
+  } catch {
+    return json({ ok: false }, { status: 400 });
+  }
+};
+const route6 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  action: action$2,
+  getRecentEvents
+}, Symbol.toStringTag, { value: "Module" }));
+const SETTINGS_NAMESPACE = "pixelpro";
+const SETTINGS_KEY = "config";
+const DEFAULT_SETTINGS = {
+  enabled: true,
+  metaPixelId: "",
+  tiktokPixelId: "",
+  googleTagId: "",
+  snapchatPixelId: ""
+};
+const PRO_ONLY_FIELDS = [
+  "tiktokPixelId",
+  "googleTagId",
+  "snapchatPixelId"
+];
+async function getSettings(admin) {
+  var _a2, _b, _c;
+  const response = await admin.graphql(
+    `#graphql
+      query GetPixelConfig($namespace: String!, $key: String!) {
+        shop {
+          metafield(namespace: $namespace, key: $key) {
+            value
+          }
+        }
+      }`,
+    {
+      variables: {
+        namespace: SETTINGS_NAMESPACE,
+        key: SETTINGS_KEY
+      }
+    }
+  );
+  const data = await response.json();
+  const raw = (_c = (_b = (_a2 = data == null ? void 0 : data.data) == null ? void 0 : _a2.shop) == null ? void 0 : _b.metafield) == null ? void 0 : _c.value;
+  if (!raw) return { ...DEFAULT_SETTINGS };
+  try {
+    const parsed = JSON.parse(raw);
+    return { ...DEFAULT_SETTINGS, ...parsed };
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
+}
+async function saveSettings(admin, settings) {
+  var _a2, _b, _c, _d;
+  const shopResponse = await admin.graphql(
+    `#graphql
+      query GetShopId {
+        shop {
+          id
+        }
+      }`
+  );
+  const shopData = await shopResponse.json();
+  const shopId = (_b = (_a2 = shopData == null ? void 0 : shopData.data) == null ? void 0 : _a2.shop) == null ? void 0 : _b.id;
+  if (!shopId) {
+    throw new Error("Could not resolve shop ID; settings were not saved.");
+  }
+  const response = await admin.graphql(
+    `#graphql
+      mutation SetPixelConfig($metafields: [MetafieldsSetInput!]!) {
+        metafieldsSet(metafields: $metafields) {
+          userErrors {
+            field
+            message
+          }
+        }
+      }`,
+    {
+      variables: {
+        metafields: [
+          {
+            ownerId: shopId,
+            namespace: SETTINGS_NAMESPACE,
+            key: SETTINGS_KEY,
+            type: "json",
+            value: JSON.stringify(settings)
+          }
+        ]
+      }
+    }
+  );
+  const data = await response.json();
+  const userErrors = ((_d = (_c = data == null ? void 0 : data.data) == null ? void 0 : _c.metafieldsSet) == null ? void 0 : _d.userErrors) ?? [];
+  if (userErrors.length > 0) {
+    throw new Error(
+      userErrors.map((e) => e.message).join("; ")
+    );
+  }
+}
+const loader$5 = async ({ request }) => {
+  const { admin, session } = await authenticate.admin(request);
+  const settings = await getSettings(admin);
+  const events = getRecentEvents(session.shop);
+  return json({
+    settings,
+    events,
+    shopDomain: session.shop,
+    appUrl: process.env.SHOPIFY_APP_URL ?? ""
+  });
+};
+const TEST_LINKS = [
+  {
+    pixel: "Meta",
+    url: "https://www.facebook.com/events_manager2/list/dataset",
+    label: "Open Meta Events Manager → Test Events"
+  },
+  {
+    pixel: "TikTok",
+    url: "https://events.tiktok.com/events_manager",
+    label: "Open TikTok Events Manager"
+  },
+  {
+    pixel: "Google",
+    url: "https://tagassistant.google.com/",
+    label: "Open Google Tag Assistant"
+  },
+  {
+    pixel: "Snapchat",
+    url: "https://ads.snapchat.com/",
+    label: "Open Snapchat Ads Manager → Events Manager"
+  }
+];
+function timeAgo(ts) {
+  const s = Math.floor((Date.now() - ts) / 1e3);
+  if (s < 5) return "just now";
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  return `${h}h ago`;
+}
+function DiagnosticsPage() {
+  const { settings, events, appUrl } = useLoaderData();
+  const [liveEvents, setLiveEvents] = useState(events);
+  useEffect(() => {
+    setLiveEvents(events);
+  }, [events]);
+  const configured = [
+    { label: "Meta Pixel", id: settings.metaPixelId, test: TEST_LINKS[0] },
+    { label: "TikTok Pixel", id: settings.tiktokPixelId, test: TEST_LINKS[1] },
+    { label: "Google Tag", id: settings.googleTagId, test: TEST_LINKS[2] },
+    { label: "Snapchat Pixel", id: settings.snapchatPixelId, test: TEST_LINKS[3] }
+  ];
+  const rows = liveEvents.map((e) => [
+    timeAgo(e.timestamp),
+    e.pixel,
+    e.event,
+    e.page || "—"
+  ]);
+  return /* @__PURE__ */ jsx(
+    Page,
+    {
+      title: "Pixel Diagnostics",
+      subtitle: "Live event feed from your storefront",
+      backAction: { content: "Settings", url: "/app" },
+      children: /* @__PURE__ */ jsxs(Layout, { children: [
+        /* @__PURE__ */ jsx(Layout.Section, { children: /* @__PURE__ */ jsx(BlockStack, { gap: "500", children: /* @__PURE__ */ jsx(Card, { children: /* @__PURE__ */ jsxs(BlockStack, { gap: "400", children: [
+          /* @__PURE__ */ jsx(Text, { as: "h2", variant: "headingMd", children: "Live event feed" }),
+          /* @__PURE__ */ jsx(Text, { as: "p", variant: "bodyMd", tone: "subdued", children: "Events fired by PixelPro on your storefront appear here in real time. Visit your store, browse a product, add to cart — then come back and refresh." }),
+          rows.length > 0 ? /* @__PURE__ */ jsx(
+            DataTable,
+            {
+              columnContentTypes: ["text", "text", "text", "text"],
+              headings: ["When", "Pixel", "Event", "Page"],
+              rows
+            }
+          ) : /* @__PURE__ */ jsx(
+            EmptyState,
+            {
+              heading: "No events yet",
+              image: "https://cdn.shopify.com/s/files/1/0262/4076/files/empty-state.svg",
+              children: /* @__PURE__ */ jsx("p", { children: "No pixel events received yet. Make sure tracking is enabled, at least one pixel ID is saved, and the app embed is turned on — then visit your storefront." })
+            }
+          ),
+          /* @__PURE__ */ jsx(InlineStack, { children: /* @__PURE__ */ jsx(
+            Button,
+            {
+              onClick: () => window.location.reload(),
+              children: "Refresh feed"
+            }
+          ) })
+        ] }) }) }) }),
+        /* @__PURE__ */ jsx(Layout.Section, { variant: "oneThird", children: /* @__PURE__ */ jsxs(BlockStack, { gap: "500", children: [
+          /* @__PURE__ */ jsx(Card, { children: /* @__PURE__ */ jsxs(BlockStack, { gap: "400", children: [
+            /* @__PURE__ */ jsx(Text, { as: "h2", variant: "headingMd", children: "Pixel status" }),
+            configured.map((p) => /* @__PURE__ */ jsxs(BlockStack, { gap: "100", children: [
+              /* @__PURE__ */ jsxs(InlineStack, { align: "space-between", blockAlign: "center", children: [
+                /* @__PURE__ */ jsx(Text, { as: "span", variant: "bodyMd", children: p.label }),
+                p.id ? /* @__PURE__ */ jsx(Badge, { tone: "success", children: "Configured" }) : /* @__PURE__ */ jsx(Badge, { children: "Not set" })
+              ] }),
+              p.id ? /* @__PURE__ */ jsx(Text, { as: "p", variant: "bodySm", tone: "subdued", children: p.id }) : null
+            ] }, p.label))
+          ] }) }),
+          /* @__PURE__ */ jsx(Card, { children: /* @__PURE__ */ jsxs(BlockStack, { gap: "300", children: [
+            /* @__PURE__ */ jsx(Text, { as: "h2", variant: "headingMd", children: "Test your pixels" }),
+            /* @__PURE__ */ jsx(Text, { as: "p", variant: "bodyMd", tone: "subdued", children: "Use each platform's official test tool to confirm events arrive:" }),
+            TEST_LINKS.map((t) => /* @__PURE__ */ jsx(
+              Button,
+              {
+                url: t.url,
+                target: "_blank",
+                fullWidth: true,
+                textAlign: "left",
+                children: t.label
+              },
+              t.pixel
+            ))
+          ] }) }),
+          appUrl ? /* @__PURE__ */ jsx(Card, { children: /* @__PURE__ */ jsxs(BlockStack, { gap: "300", children: [
+            /* @__PURE__ */ jsx(Text, { as: "h2", variant: "headingMd", children: "Server-side tracking" }),
+            /* @__PURE__ */ jsx(Text, { as: "p", variant: "bodyMd", tone: "subdued", children: "Browser pixels can be blocked by ad blockers and iOS privacy features. Server-side tracking (Meta Conversions API, TikTok Events API) sends events directly from our servers for maximum accuracy." }),
+            /* @__PURE__ */ jsx(Badge, { tone: "info", children: "Coming soon" })
+          ] }) }) : null
+        ] }) })
+      ] })
+    }
+  );
+}
+const route7 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  default: DiagnosticsPage,
+  loader: loader$5
 }, Symbol.toStringTag, { value: "Module" }));
 const IS_TEST_BILLING$1 = process.env.NODE_ENV !== "production";
 const PRO_PRICE = "$12.99";
@@ -358,101 +618,12 @@ function BillingPage() {
     /* @__PURE__ */ jsx(Text, { as: "p", variant: "bodySm", tone: "subdued", children: "Billing is handled securely by Shopify. Charges appear on your regular Shopify invoice and can be cancelled anytime." })
   ] }) }) }) });
 }
-const route6 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+const route8 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
   action: action$1,
   default: BillingPage,
   loader: loader$4
 }, Symbol.toStringTag, { value: "Module" }));
-const SETTINGS_NAMESPACE = "pixelpro";
-const SETTINGS_KEY = "config";
-const DEFAULT_SETTINGS = {
-  enabled: true,
-  metaPixelId: "",
-  tiktokPixelId: "",
-  googleTagId: "",
-  snapchatPixelId: ""
-};
-const PRO_ONLY_FIELDS = [
-  "tiktokPixelId",
-  "googleTagId",
-  "snapchatPixelId"
-];
-async function getSettings(admin) {
-  var _a2, _b, _c;
-  const response = await admin.graphql(
-    `#graphql
-      query GetPixelConfig($namespace: String!, $key: String!) {
-        shop {
-          metafield(namespace: $namespace, key: $key) {
-            value
-          }
-        }
-      }`,
-    {
-      variables: {
-        namespace: SETTINGS_NAMESPACE,
-        key: SETTINGS_KEY
-      }
-    }
-  );
-  const data = await response.json();
-  const raw = (_c = (_b = (_a2 = data == null ? void 0 : data.data) == null ? void 0 : _a2.shop) == null ? void 0 : _b.metafield) == null ? void 0 : _c.value;
-  if (!raw) return { ...DEFAULT_SETTINGS };
-  try {
-    const parsed = JSON.parse(raw);
-    return { ...DEFAULT_SETTINGS, ...parsed };
-  } catch {
-    return { ...DEFAULT_SETTINGS };
-  }
-}
-async function saveSettings(admin, settings) {
-  var _a2, _b, _c, _d;
-  const shopResponse = await admin.graphql(
-    `#graphql
-      query GetShopId {
-        shop {
-          id
-        }
-      }`
-  );
-  const shopData = await shopResponse.json();
-  const shopId = (_b = (_a2 = shopData == null ? void 0 : shopData.data) == null ? void 0 : _a2.shop) == null ? void 0 : _b.id;
-  if (!shopId) {
-    throw new Error("Could not resolve shop ID; settings were not saved.");
-  }
-  const response = await admin.graphql(
-    `#graphql
-      mutation SetPixelConfig($metafields: [MetafieldsSetInput!]!) {
-        metafieldsSet(metafields: $metafields) {
-          userErrors {
-            field
-            message
-          }
-        }
-      }`,
-    {
-      variables: {
-        metafields: [
-          {
-            ownerId: shopId,
-            namespace: SETTINGS_NAMESPACE,
-            key: SETTINGS_KEY,
-            type: "json",
-            value: JSON.stringify(settings)
-          }
-        ]
-      }
-    }
-  );
-  const data = await response.json();
-  const userErrors = ((_d = (_c = data == null ? void 0 : data.data) == null ? void 0 : _c.metafieldsSet) == null ? void 0 : _d.userErrors) ?? [];
-  if (userErrors.length > 0) {
-    throw new Error(
-      userErrors.map((e) => e.message).join("; ")
-    );
-  }
-}
 const IS_TEST_BILLING = process.env.NODE_ENV !== "production";
 function validatePixelId(key, value) {
   const v = value.trim();
@@ -473,16 +644,69 @@ function validatePixelId(key, value) {
   }
 }
 const loader$3 = async ({ request }) => {
-  const { admin, billing } = await authenticate.admin(request);
-  const [settings, billingCheck] = await Promise.all([
+  const { admin, billing, session } = await authenticate.admin(request);
+  const [settings, billingCheck, embedStatus] = await Promise.all([
     getSettings(admin),
-    billing.check({ plans: [PRO_PLAN], isTest: IS_TEST_BILLING })
+    billing.check({ plans: [PRO_PLAN], isTest: IS_TEST_BILLING }),
+    checkEmbedEnabled(admin)
   ]);
   return json({
     settings,
-    isPro: billingCheck.hasActivePayment
+    isPro: billingCheck.hasActivePayment,
+    embedEnabled: embedStatus.enabled,
+    shopDomain: session.shop
   });
 };
+async function checkEmbedEnabled(admin) {
+  var _a2, _b, _c, _d, _e, _f, _g, _h;
+  try {
+    const response = await admin.graphql(
+      `#graphql
+        query GetMainTheme {
+          themes(first: 10) {
+            nodes {
+              id
+              role
+            }
+          }
+        }`
+    );
+    const data = await response.json();
+    const themes = ((_b = (_a2 = data == null ? void 0 : data.data) == null ? void 0 : _a2.themes) == null ? void 0 : _b.nodes) ?? [];
+    const mainTheme = themes.find((t) => t.role === "MAIN") ?? themes[0];
+    if (!mainTheme) return { enabled: false };
+    const themeId = String(mainTheme.id).split("/").pop();
+    const assetResponse = await admin.graphql(
+      `#graphql
+        query GetSettingsData($themeId: ID!) {
+          theme(id: $themeId) {
+            files(filenames: ["config/settings_data.json"], first: 1) {
+              nodes {
+                ... on OnlineStoreThemeFile {
+                  content
+                }
+              }
+            }
+          }
+        }`,
+      { variables: { themeId: mainTheme.id } }
+    );
+    void themeId;
+    const assetData = await assetResponse.json();
+    const content = ((_g = (_f = (_e = (_d = (_c = assetData == null ? void 0 : assetData.data) == null ? void 0 : _c.theme) == null ? void 0 : _d.files) == null ? void 0 : _e.nodes) == null ? void 0 : _f[0]) == null ? void 0 : _g.content) ?? "";
+    if (!content) return { enabled: false };
+    const settingsData = JSON.parse(content);
+    const blocks = ((_h = settingsData == null ? void 0 : settingsData.current) == null ? void 0 : _h.blocks) ?? {};
+    for (const [key, block] of Object.entries(blocks)) {
+      if (key.includes("pixel-pro") || (block == null ? void 0 : block.type) === "pixel-pro") {
+        return { enabled: (block == null ? void 0 : block.disabled) !== true };
+      }
+    }
+    return { enabled: false };
+  } catch {
+    return { enabled: false };
+  }
+}
 const action = async ({ request }) => {
   const { admin, billing } = await authenticate.admin(request);
   const formData = await request.formData();
@@ -553,7 +777,12 @@ function PixelStatus({ settings }) {
   ] });
 }
 function SettingsPage() {
-  const { settings: initial, isPro } = useLoaderData();
+  const {
+    settings: initial,
+    isPro,
+    embedEnabled,
+    shopDomain
+  } = useLoaderData();
   const actionData = useActionData();
   const navigation = useNavigation();
   const submit = useSubmit();
@@ -695,8 +924,28 @@ function SettingsPage() {
           ] }) }) }),
           /* @__PURE__ */ jsx(Layout.Section, { variant: "oneThird", children: /* @__PURE__ */ jsxs(BlockStack, { gap: "500", children: [
             /* @__PURE__ */ jsx(Card, { children: /* @__PURE__ */ jsxs(BlockStack, { gap: "400", children: [
+              /* @__PURE__ */ jsxs(InlineStack, { align: "space-between", blockAlign: "center", children: [
+                /* @__PURE__ */ jsx(Text, { as: "h2", variant: "headingMd", children: "App embed" }),
+                embedEnabled ? /* @__PURE__ */ jsx(Badge, { tone: "success", children: "Enabled" }) : /* @__PURE__ */ jsx(Badge, { tone: "critical", children: "Not enabled" })
+              ] }),
+              /* @__PURE__ */ jsx(Text, { as: "p", variant: "bodyMd", tone: "subdued", children: embedEnabled ? "PixelPro Tracking is active on your theme. Pixels fire on the storefront." : "Turn on the PixelPro Tracking embed in your theme editor to start firing pixels." }),
+              /* @__PURE__ */ jsx(
+                Button,
+                {
+                  url: `https://admin.shopify.com/store/${shopDomain.replace(".myshopify.com", "")}/themes/current/editor?context=apps`,
+                  target: "_blank",
+                  children: embedEnabled ? "Open theme editor" : "Enable in theme editor"
+                }
+              )
+            ] }) }),
+            /* @__PURE__ */ jsx(Card, { children: /* @__PURE__ */ jsxs(BlockStack, { gap: "400", children: [
               /* @__PURE__ */ jsx(Text, { as: "h2", variant: "headingMd", children: "Storefront status" }),
               /* @__PURE__ */ jsx(PixelStatus, { settings: form })
+            ] }) }),
+            /* @__PURE__ */ jsx(Card, { children: /* @__PURE__ */ jsxs(BlockStack, { gap: "300", children: [
+              /* @__PURE__ */ jsx(InlineStack, { align: "space-between", blockAlign: "center", children: /* @__PURE__ */ jsx(Text, { as: "h2", variant: "headingMd", children: "Diagnostics" }) }),
+              /* @__PURE__ */ jsx(Text, { as: "p", variant: "bodyMd", tone: "subdued", children: "See live pixel events from your storefront and test each pixel." }),
+              /* @__PURE__ */ jsx(Button, { url: "/app/diagnostics", children: "Open diagnostics" })
             ] }) }),
             /* @__PURE__ */ jsx(Card, { children: /* @__PURE__ */ jsxs(BlockStack, { gap: "300", children: [
               /* @__PURE__ */ jsx(Text, { as: "h2", variant: "headingMd", children: "How to activate" }),
@@ -722,7 +971,7 @@ function SettingsPage() {
     }
   );
 }
-const route7 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+const route9 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
   action,
   default: SettingsPage,
@@ -756,7 +1005,7 @@ function Auth() {
     /* @__PURE__ */ jsx(Button, { submit: true, variant: "primary", children: "Log in" })
   ] }) }) }) }) }) });
 }
-const route8 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+const route10 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
   default: Auth,
   links: links$1,
@@ -766,7 +1015,7 @@ const loader$1 = async ({ request }) => {
   await authenticate.admin(request);
   return null;
 };
-const route9 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+const route11 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
   loader: loader$1
 }, Symbol.toStringTag, { value: "Module" }));
@@ -791,7 +1040,7 @@ function ErrorBoundary() {
 const headers = (headersArgs) => {
   return boundary.headers(headersArgs);
 };
-const route10 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+const route12 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
   ErrorBoundary,
   default: App,
@@ -799,7 +1048,7 @@ const route10 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.definePrope
   links,
   loader
 }, Symbol.toStringTag, { value: "Module" }));
-const serverManifest = { "entry": { "module": "/assets/entry.client-BeOE-d1E.js", "imports": ["/assets/components-DhY-WGTe.js"], "css": [] }, "routes": { "root": { "id": "root", "parentId": void 0, "path": "", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/root-DfcyJ4NM.js", "imports": ["/assets/components-DhY-WGTe.js"], "css": [] }, "routes/webhooks.customers.data_request": { "id": "routes/webhooks.customers.data_request", "parentId": "root", "path": "webhooks/customers/data_request", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/webhooks.customers.data_request-l0sNRNKZ.js", "imports": [], "css": [] }, "routes/webhooks.app.scopes_update": { "id": "routes/webhooks.app.scopes_update", "parentId": "root", "path": "webhooks/app/scopes_update", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/webhooks.app.scopes_update-l0sNRNKZ.js", "imports": [], "css": [] }, "routes/webhooks.customers.redact": { "id": "routes/webhooks.customers.redact", "parentId": "root", "path": "webhooks/customers/redact", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/webhooks.customers.redact-l0sNRNKZ.js", "imports": [], "css": [] }, "routes/webhooks.app.uninstalled": { "id": "routes/webhooks.app.uninstalled", "parentId": "root", "path": "webhooks/app/uninstalled", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/webhooks.app.uninstalled-l0sNRNKZ.js", "imports": [], "css": [] }, "routes/webhooks.shop.redact": { "id": "routes/webhooks.shop.redact", "parentId": "root", "path": "webhooks/shop/redact", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/webhooks.shop.redact-l0sNRNKZ.js", "imports": [], "css": [] }, "routes/app.billing": { "id": "routes/app.billing", "parentId": "routes/app", "path": "billing", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/app.billing-cv6Iv_Zf.js", "imports": ["/assets/components-DhY-WGTe.js", "/assets/Page-Cpwxno8S.js", "/assets/Layout-CgVYFk6G.js", "/assets/context-CI-AIbhn.js"], "css": [] }, "routes/app._index": { "id": "routes/app._index", "parentId": "routes/app", "path": void 0, "index": true, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/app._index-BEhAbKvG.js", "imports": ["/assets/components-DhY-WGTe.js", "/assets/Page-Cpwxno8S.js", "/assets/Layout-CgVYFk6G.js", "/assets/FormLayout-CXOWS3Ia.js", "/assets/context-CI-AIbhn.js"], "css": [] }, "routes/_index": { "id": "routes/_index", "parentId": "root", "path": void 0, "index": true, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/_index-BMqjGlmI.js", "imports": ["/assets/components-DhY-WGTe.js", "/assets/styles-ByyZdXpi.js", "/assets/Page-Cpwxno8S.js", "/assets/FormLayout-CXOWS3Ia.js", "/assets/context-CI-AIbhn.js"], "css": [] }, "routes/auth.$": { "id": "routes/auth.$", "parentId": "root", "path": "auth/*", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/auth._-l0sNRNKZ.js", "imports": [], "css": [] }, "routes/app": { "id": "routes/app", "parentId": "root", "path": "app", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": true, "module": "/assets/app-B1Gn0W_E.js", "imports": ["/assets/components-DhY-WGTe.js", "/assets/styles-ByyZdXpi.js", "/assets/context-CI-AIbhn.js"], "css": [] } }, "url": "/assets/manifest-2b18253e.js", "version": "2b18253e" };
+const serverManifest = { "entry": { "module": "/assets/entry.client-BeOE-d1E.js", "imports": ["/assets/components-DhY-WGTe.js"], "css": [] }, "routes": { "root": { "id": "root", "parentId": void 0, "path": "", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/root-DfcyJ4NM.js", "imports": ["/assets/components-DhY-WGTe.js"], "css": [] }, "routes/webhooks.customers.data_request": { "id": "routes/webhooks.customers.data_request", "parentId": "root", "path": "webhooks/customers/data_request", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/webhooks.customers.data_request-l0sNRNKZ.js", "imports": [], "css": [] }, "routes/webhooks.app.scopes_update": { "id": "routes/webhooks.app.scopes_update", "parentId": "root", "path": "webhooks/app/scopes_update", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/webhooks.app.scopes_update-l0sNRNKZ.js", "imports": [], "css": [] }, "routes/webhooks.customers.redact": { "id": "routes/webhooks.customers.redact", "parentId": "root", "path": "webhooks/customers/redact", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/webhooks.customers.redact-l0sNRNKZ.js", "imports": [], "css": [] }, "routes/webhooks.app.uninstalled": { "id": "routes/webhooks.app.uninstalled", "parentId": "root", "path": "webhooks/app/uninstalled", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/webhooks.app.uninstalled-l0sNRNKZ.js", "imports": [], "css": [] }, "routes/webhooks.shop.redact": { "id": "routes/webhooks.shop.redact", "parentId": "root", "path": "webhooks/shop/redact", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/webhooks.shop.redact-l0sNRNKZ.js", "imports": [], "css": [] }, "routes/api.pixel-events": { "id": "routes/api.pixel-events", "parentId": "root", "path": "api/pixel-events", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/api.pixel-events-l0sNRNKZ.js", "imports": [], "css": [] }, "routes/app.diagnostics": { "id": "routes/app.diagnostics", "parentId": "routes/app", "path": "diagnostics", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/app.diagnostics-ROgSqPsE.js", "imports": ["/assets/components-DhY-WGTe.js", "/assets/Page-BwWbnNu1.js", "/assets/Layout-U9DlrdpL.js", "/assets/context-DkEZvobt.js"], "css": [] }, "routes/app.billing": { "id": "routes/app.billing", "parentId": "routes/app", "path": "billing", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/app.billing-bPKzJzqh.js", "imports": ["/assets/components-DhY-WGTe.js", "/assets/Page-BwWbnNu1.js", "/assets/Layout-U9DlrdpL.js", "/assets/Banner-BeCarsUe.js", "/assets/context-DkEZvobt.js"], "css": [] }, "routes/app._index": { "id": "routes/app._index", "parentId": "routes/app", "path": void 0, "index": true, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/app._index-BwTntW05.js", "imports": ["/assets/components-DhY-WGTe.js", "/assets/Page-BwWbnNu1.js", "/assets/Banner-BeCarsUe.js", "/assets/Layout-U9DlrdpL.js", "/assets/FormLayout-DRoOMqU-.js", "/assets/context-DkEZvobt.js"], "css": [] }, "routes/_index": { "id": "routes/_index", "parentId": "root", "path": void 0, "index": true, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/_index-CmxG3J36.js", "imports": ["/assets/components-DhY-WGTe.js", "/assets/styles-DyuxoJmC.js", "/assets/Page-BwWbnNu1.js", "/assets/FormLayout-DRoOMqU-.js", "/assets/context-DkEZvobt.js"], "css": [] }, "routes/auth.$": { "id": "routes/auth.$", "parentId": "root", "path": "auth/*", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": false, "module": "/assets/auth._-l0sNRNKZ.js", "imports": [], "css": [] }, "routes/app": { "id": "routes/app", "parentId": "root", "path": "app", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasErrorBoundary": true, "module": "/assets/app-BVQ8-x3x.js", "imports": ["/assets/components-DhY-WGTe.js", "/assets/styles-DyuxoJmC.js", "/assets/context-DkEZvobt.js"], "css": [] } }, "url": "/assets/manifest-d1513d20.js", "version": "d1513d20" };
 const mode = "production";
 const assetsBuildDirectory = "build/client";
 const basename = "/";
@@ -856,13 +1105,29 @@ const routes = {
     caseSensitive: void 0,
     module: route5
   },
+  "routes/api.pixel-events": {
+    id: "routes/api.pixel-events",
+    parentId: "root",
+    path: "api/pixel-events",
+    index: void 0,
+    caseSensitive: void 0,
+    module: route6
+  },
+  "routes/app.diagnostics": {
+    id: "routes/app.diagnostics",
+    parentId: "routes/app",
+    path: "diagnostics",
+    index: void 0,
+    caseSensitive: void 0,
+    module: route7
+  },
   "routes/app.billing": {
     id: "routes/app.billing",
     parentId: "routes/app",
     path: "billing",
     index: void 0,
     caseSensitive: void 0,
-    module: route6
+    module: route8
   },
   "routes/app._index": {
     id: "routes/app._index",
@@ -870,7 +1135,7 @@ const routes = {
     path: void 0,
     index: true,
     caseSensitive: void 0,
-    module: route7
+    module: route9
   },
   "routes/_index": {
     id: "routes/_index",
@@ -878,7 +1143,7 @@ const routes = {
     path: void 0,
     index: true,
     caseSensitive: void 0,
-    module: route8
+    module: route10
   },
   "routes/auth.$": {
     id: "routes/auth.$",
@@ -886,7 +1151,7 @@ const routes = {
     path: "auth/*",
     index: void 0,
     caseSensitive: void 0,
-    module: route9
+    module: route11
   },
   "routes/app": {
     id: "routes/app",
@@ -894,7 +1159,7 @@ const routes = {
     path: "app",
     index: void 0,
     caseSensitive: void 0,
-    module: route10
+    module: route12
   }
 };
 export {

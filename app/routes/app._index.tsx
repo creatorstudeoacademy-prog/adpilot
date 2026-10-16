@@ -12,6 +12,7 @@ import {
   Badge,
   Banner,
   BlockStack,
+  Button,
   Card,
   Checkbox,
   Divider,
@@ -69,18 +70,82 @@ function validatePixelId(
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, billing } = await authenticate.admin(request);
+  const { admin, billing, session } = await authenticate.admin(request);
 
-  const [settings, billingCheck] = await Promise.all([
+  const [settings, billingCheck, embedStatus] = await Promise.all([
     getSettings(admin),
     billing.check({ plans: [PRO_PLAN], isTest: IS_TEST_BILLING }),
+    checkEmbedEnabled(admin),
   ]);
 
   return json({
     settings,
     isPro: billingCheck.hasActivePayment,
+    embedEnabled: embedStatus.enabled,
+    shopDomain: session.shop,
   });
 };
+
+/**
+ * Checks whether the PixelPro app embed block is enabled on the published theme.
+ * Reads the main theme's settings_data.json via the Asset API (needs read_themes).
+ */
+async function checkEmbedEnabled(
+  admin: any,
+): Promise<{ enabled: boolean }> {
+  try {
+    const response = await admin.graphql(
+      `#graphql
+        query GetMainTheme {
+          themes(first: 10) {
+            nodes {
+              id
+              role
+            }
+          }
+        }`,
+    );
+    const data = await response.json();
+    const themes = data?.data?.themes?.nodes ?? [];
+    const mainTheme = themes.find((t: any) => t.role === "MAIN") ?? themes[0];
+    if (!mainTheme) return { enabled: false };
+
+    const themeId = String(mainTheme.id).split("/").pop();
+
+    const assetResponse = await admin.graphql(
+      `#graphql
+        query GetSettingsData($themeId: ID!) {
+          theme(id: $themeId) {
+            files(filenames: ["config/settings_data.json"], first: 1) {
+              nodes {
+                ... on OnlineStoreThemeFile {
+                  content
+                }
+              }
+            }
+          }
+        }`,
+      { variables: { themeId: mainTheme.id } },
+    );
+    void themeId;
+    const assetData = await assetResponse.json();
+    const content =
+      assetData?.data?.theme?.files?.nodes?.[0]?.content ?? "";
+    if (!content) return { enabled: false };
+
+    const settingsData = JSON.parse(content);
+    const blocks = settingsData?.current?.blocks ?? {};
+    // App embed blocks are keyed like "<api_key>/pixel-pro" or contain "pixel-pro"
+    for (const [key, block] of Object.entries(blocks) as [string, any][]) {
+      if (key.includes("pixel-pro") || block?.type === "pixel-pro") {
+        return { enabled: block?.disabled !== true };
+      }
+    }
+    return { enabled: false };
+  } catch {
+    return { enabled: false };
+  }
+}
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin, billing } = await authenticate.admin(request);
@@ -185,7 +250,12 @@ function PixelStatus({ settings }: { settings: PixelSettings }) {
 }
 
 export default function SettingsPage() {
-  const { settings: initial, isPro } = useLoaderData<typeof loader>();
+  const {
+    settings: initial,
+    isPro,
+    embedEnabled,
+    shopDomain,
+  } = useLoaderData<typeof loader>();
   const actionData = useActionData<SettingsActionData>();
   const navigation = useNavigation();
   const submit = useSubmit();
@@ -366,10 +436,51 @@ export default function SettingsPage() {
             <BlockStack gap="500">
               <Card>
                 <BlockStack gap="400">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <Text as="h2" variant="headingMd">
+                      App embed
+                    </Text>
+                    {embedEnabled ? (
+                      <Badge tone="success">Enabled</Badge>
+                    ) : (
+                      <Badge tone="critical">Not enabled</Badge>
+                    )}
+                  </InlineStack>
+                  <Text as="p" variant="bodyMd" tone="subdued">
+                    {embedEnabled
+                      ? "PixelPro Tracking is active on your theme. Pixels fire on the storefront."
+                      : "Turn on the PixelPro Tracking embed in your theme editor to start firing pixels."}
+                  </Text>
+                  <Button
+                    url={`https://admin.shopify.com/store/${shopDomain.replace(".myshopify.com", "")}/themes/current/editor?context=apps`}
+                    target="_blank"
+                  >
+                    {embedEnabled ? "Open theme editor" : "Enable in theme editor"}
+                  </Button>
+                </BlockStack>
+              </Card>
+
+              <Card>
+                <BlockStack gap="400">
                   <Text as="h2" variant="headingMd">
                     Storefront status
                   </Text>
                   <PixelStatus settings={form} />
+                </BlockStack>
+              </Card>
+
+              <Card>
+                <BlockStack gap="300">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <Text as="h2" variant="headingMd">
+                      Diagnostics
+                    </Text>
+                  </InlineStack>
+                  <Text as="p" variant="bodyMd" tone="subdued">
+                    See live pixel events from your storefront and test each
+                    pixel.
+                  </Text>
+                  <Button url="/app/diagnostics">Open diagnostics</Button>
                 </BlockStack>
               </Card>
 

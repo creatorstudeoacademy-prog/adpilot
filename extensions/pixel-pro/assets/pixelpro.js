@@ -24,6 +24,36 @@
   var cfg = getConfig();
   if (!cfg) return;
 
+  /* ---------- diagnostics beacon (live event feed in the app admin) ---------- */
+
+  var APP_URL = "https://pixelpro-manager-production.up.railway.app";
+  var SHOP_DOMAIN = cfg.shopDomain || "";
+
+  function beacon(pixel, event) {
+    if (!SHOP_DOMAIN) return;
+    safe(function () {
+      var payload = JSON.stringify({
+        shop: SHOP_DOMAIN,
+        pixel: pixel,
+        event: event,
+        page: cfg.page || "",
+      });
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon(
+          APP_URL + "/api/pixel-events",
+          new Blob([payload], { type: "application/json" }),
+        );
+      } else if (window.fetch) {
+        window.fetch(APP_URL + "/api/pixel-events", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: payload,
+          keepalive: true,
+        });
+      }
+    });
+  }
+
   function safe(fn) {
     try {
       fn();
@@ -38,6 +68,7 @@
     if (!cfg.meta || typeof window.fbq !== "function") return;
     safe(function () {
       window.fbq("track", event, params || {});
+      beacon("Meta", event);
     });
   }
 
@@ -45,6 +76,7 @@
     if (!cfg.tiktok || typeof window.ttq === "undefined") return;
     safe(function () {
       window.ttq.track(event, params || {});
+      beacon("TikTok", event);
     });
   }
 
@@ -52,6 +84,7 @@
     if (!cfg.google || typeof window.gtag !== "function") return;
     safe(function () {
       window.gtag("event", event, params || {});
+      beacon("Google", event);
     });
   }
 
@@ -59,6 +92,7 @@
     if (!cfg.snapchat || typeof window.snaptr !== "function") return;
     safe(function () {
       window.snaptr("track", event, params || {});
+      beacon("Snapchat", event);
     });
   }
 
