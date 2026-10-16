@@ -1,5 +1,6 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
-import { redirect } from "@remix-run/node";
+import { json } from "@remix-run/node";
+import { useLoaderData } from "@remix-run/react";
 
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
@@ -44,7 +45,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const error = url.searchParams.get("error");
 
   if (error || !code) {
-    return redirect("/app/accounts?meta_error=denied");
+    return json({ ok: false, error: "denied" });
   }
 
   const redirectUri = `${appUrl}/auth/meta/callback`;
@@ -61,7 +62,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   );
   if (!tokenRes.ok) {
     console.error("Meta token exchange failed:", await tokenRes.text());
-    return redirect("/app/accounts?meta_error=token");
+    return json({ ok: false, error: "token" });
   }
   const tokenData = (await tokenRes.json()) as TokenResponse;
 
@@ -95,7 +96,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   );
   if (!pagesRes.ok) {
     console.error("Meta pages fetch failed:", await pagesRes.text());
-    return redirect("/app/accounts?meta_error=pages");
+    return json({ ok: false, error: "pages" });
   }
   const pagesData = (await pagesRes.json()) as PagesResponse;
 
@@ -145,5 +146,59 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
 
-  return redirect("/app/accounts?connected=1");
+  const connectedPages = pagesData.data ?? [];
+  return json({ ok: true, pages: connectedPages.length });
 };
+
+/**
+ * The OAuth flow runs in a new browser tab (Facebook blocks iframes), so the
+ * callback renders a plain confirmation page instead of redirecting back
+ * into the embedded app. Plain HTML — no Shopify AppProvider out here.
+ */
+export default function MetaCallback() {
+  const data = useLoaderData<typeof loader>() as
+    | { ok: true; pages: number }
+    | { ok: false; error: string };
+
+  const ok = data.ok === true;
+  const title = ok ? "Facebook connected" : "Connection failed";
+  const message = ok
+    ? `Connected ${data.pages} Facebook Page${data.pages === 1 ? "" : "s"}. You can close this tab and return to your Shopify admin — your accounts will appear there.`
+    : "The Facebook connection did not complete. Close this tab and try again from the Accounts page.";
+
+  return (
+    <html lang="en">
+      <head>
+        <meta charSet="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>{title} — AdPilot</title>
+      </head>
+      <body
+        style={{
+          fontFamily: "system-ui, -apple-system, sans-serif",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          minHeight: "100vh",
+          margin: 0,
+          background: "#f6f6f7",
+        }}
+      >
+        <div
+          style={{
+            background: "#fff",
+            borderRadius: 12,
+            padding: "40px 48px",
+            maxWidth: 440,
+            textAlign: "center",
+            boxShadow: "0 2px 12px rgba(0,0,0,0.08)",
+          }}
+        >
+          <div style={{ fontSize: 48, marginBottom: 12 }}>{ok ? "✅" : "⚠️"}</div>
+          <h1 style={{ fontSize: 22, margin: "0 0 12px" }}>{title}</h1>
+          <p style={{ fontSize: 15, color: "#5c5f62", lineHeight: 1.5 }}>{message}</p>
+        </div>
+      </body>
+    </html>
+  );
+}

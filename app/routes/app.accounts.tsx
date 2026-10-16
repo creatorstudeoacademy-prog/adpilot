@@ -178,7 +178,7 @@ function AccountCard({
 }
 
 export default function AccountsPage() {
-  const { metaConfigured, pages, instagrams, adAccounts } =
+  const { shop, metaConfigured, pages, instagrams, adAccounts } =
     useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -224,7 +224,11 @@ export default function AccountsPage() {
         <Card>
           <InlineStack gap="300">
             {metaConfigured && (
-              <Button variant="primary" url="/auth/meta">
+              <Button
+                variant="primary"
+                url={`/auth/meta?shop=${encodeURIComponent(shop)}`}
+                target="_blank"
+              >
                 Connect Facebook
               </Button>
             )}
