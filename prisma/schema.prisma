@@ -1,7 +1,6 @@
-// Prisma schema for Free Shipping Bar.
-// Stores OAuth sessions only. Bar configuration lives in shop metafields
-// (namespace "free_shipping_bar") so the theme app extension can read it
-// directly in Liquid without an app proxy.
+// Prisma schema for AdPilot — Social Media Command Center.
+// Stores Shopify OAuth sessions, connected Meta social accounts,
+// and scheduled social media posts.
 //
 // For production, switch provider to "postgresql" and set DATABASE_URL.
 
@@ -32,4 +31,38 @@ model Session {
   emailVerified Boolean?  @default(false)
   refreshToken  String?
   refreshTokenExpires DateTime?
+}
+
+/// A connected Facebook Page (and linked Instagram Business account).
+model SocialAccount {
+  id           String   @id @default(cuid())
+  shop         String
+  platform     String   @default("facebook") // facebook | instagram
+  pageId       String
+  pageName     String
+  accessToken  String
+  tokenExpires DateTime?
+  instagramId  String?
+  createdAt    DateTime @default(now())
+
+  posts ScheduledPost[]
+
+  @@unique([shop, pageId])
+}
+
+/// A social media post — drafted, scheduled, published, or failed.
+model ScheduledPost {
+  id              String    @id @default(cuid())
+  shop            String
+  socialAccountId String
+  socialAccount   SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  content         String
+  mediaUrls       String    @default("[]") // JSON array of media URLs
+  mediaType       String    @default("post") // post | reel | video
+  platforms       String    @default("[\"facebook\"]") // JSON array: facebook, instagram
+  scheduledAt     DateTime?
+  status          String    @default("draft") // draft | scheduled | published | failed
+  publishedAt     DateTime?
+  error           String?
+  createdAt       DateTime  @default(now())
 }

@@ -1,19 +1,22 @@
 # Learn more about configuring your app:
 # https://shopify.dev/docs/apps/tools/cli/configuration
 
+# NOTE: client_id belongs to the PixelPro Partner app entry.
+# Create a new Partner app entry for AdPilot and update client_id,
+# application_url, and redirect_urls before deploying.
 client_id = "54429c56772f939498b5a993285b0ed2"
-name = "PixelPro - Multi Pixel Manager"
-handle = "pixelpro-manager"
-application_url = "https://pixelpro-manager-production.up.railway.app"
+name = "AdPilot - Social Media Command Center"
+handle = "adpilot"
+application_url = "https://adpilot-production.up.railway.app"
 embedded = true
 
 [access_scopes]
-# This app stores its configuration in shop metafields (custom namespace)
-# and bills through the Billing API. No additional access scopes are required.
-scopes = "write_pixels,read_pixels,read_themes"
+# AdPilot stores social accounts and scheduled posts in its own database.
+# No storefront/theme access needed.
+scopes = ""
 
 [auth]
-redirect_urls = ["https://pixelpro-manager-production.up.railway.app/auth/callback"]
+redirect_urls = ["https://adpilot-production.up.railway.app/auth/callback"]
 
 [webhooks]
 api_version = "2026-01"

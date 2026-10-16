@@ -8,9 +8,8 @@ import db from "../db.server";
  *
  * This app stores:
  *  - OAuth sessions in its own database  -> deleted below
- *  - Shop-level pixel configuration in shop metafields (namespace
- *    "pixelpro") -> shop-owned data; the merchant can delete it in
- *    the theme editor / admin. No customer PII is stored anywhere.
+ *  - Social accounts + scheduled posts in its own database -> no customer PII.
+ *    Meta access tokens are shop-level credentials, deleted on app uninstall.
  */
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { shop, topic, payload } = await authenticate.webhook(request);

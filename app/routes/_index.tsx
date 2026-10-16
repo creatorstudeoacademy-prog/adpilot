@@ -39,7 +39,7 @@ export default function Auth() {
             <FormLayout>
               <BlockStack gap="200">
                 <Text as="h2" variant="headingMd">
-                  PixelPro — Multi Pixel Manager
+                  AdPilot — Social Media Command Center
                 </Text>
                 <Text as="p" variant="bodyMd">
                   Log in to install the app on your store.

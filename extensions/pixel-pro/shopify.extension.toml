@@ -1,8 +1,0 @@
-# Theme app extension: PixelPro Tracking
-# https://shopify.dev/docs/apps/build/online-store/theme-app-extensions
-
-api_version = "2026-01"
-type = "theme"
-name = "PixelPro Tracking"
-handle = "pixel-pro"
-uid = "db481f1c-ef03-741c-1595-e396a78d10298c8d44fa"

@@ -16,10 +16,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     await db.session.deleteMany({ where: { shop } });
   }
 
-  // NOTE: the shop's pixel configuration lives in shop metafields
-  // (namespace "pixelpro"). It cannot be removed here because the
-  // API session is gone after uninstall. The metafield is tiny JSON and
-  // harmless; it is overwritten on the next install.
+  // NOTE: AdPilot stores all data (social accounts, scheduled posts) in its
+  // own database. Clean up the shop's data on uninstall.
+  await db.scheduledPost.deleteMany({ where: { shop } });
+  await db.socialAccount.deleteMany({ where: { shop } });
 
   return new Response();
 };

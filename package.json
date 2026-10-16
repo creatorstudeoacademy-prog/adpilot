@@ -15,7 +15,8 @@
     "react-dom": "^18.2.0",
     "vite-tsconfig-paths": "^5.0.1"
   },
-  "description": "Multi-pixel tracking for Shopify stores - install Meta, TikTok, Google and Snapchat pixels from one dashboard",
+  "description": "Social media command center - schedule posts, reels and videos to Facebook and Instagram",
+  "name": "adpilot",
   "devDependencies": {
     "@remix-run/eslint-config": "^2.16.1",
     "@types/eslint": "^9.6.1",

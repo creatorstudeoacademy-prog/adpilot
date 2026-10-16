@@ -22,8 +22,8 @@ import {
 import { PRO_PLAN, authenticate } from "../shopify.server";
 
 const IS_TEST_BILLING = process.env.NODE_ENV !== "production";
-const PRO_PRICE = "$12.99";
-const PRO_NAME = "PixelPro";
+const PLAN_PRICE = "$9.99";
+const PLAN_NAME = "AdPilot Starter";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { billing } = await authenticate.admin(request);
@@ -50,7 +50,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (intent === "upgrade") {
     // Throws a redirect Response to Shopify's hosted confirmation page.
-    // trialDays gives a 7-day free trial (overrides the plan default).
     await billing.request({
       plan: PRO_PLAN,
       isTest: IS_TEST_BILLING,
@@ -89,7 +88,7 @@ export default function BillingPage() {
   };
 
   return (
-    <Page title="Billing" subtitle="Choose the plan that fits your store">
+    <Page title="Billing" subtitle="Choose the plan that fits your business">
       <Layout>
         <Layout.Section>
           <BlockStack gap="500">
@@ -112,9 +111,9 @@ export default function BillingPage() {
                         $0
                       </Text>
                       <List type="bullet">
-                        <List.Item>Meta (Facebook) Pixel tracking</List.Item>
-                        <List.Item>PageView, ViewContent, AddToCart, InitiateCheckout & Purchase events</List.Item>
-                        <List.Item>One-click app embed install</List.Item>
+                        <List.Item>Connect 1 Facebook Page</List.Item>
+                        <List.Item>5 scheduled posts per month</List.Item>
+                        <List.Item>Publish to Facebook</List.Item>
                       </List>
                     </BlockStack>
                     {!isPro ? (
@@ -122,10 +121,7 @@ export default function BillingPage() {
                         You are on the Free plan.
                       </Text>
                     ) : (
-                      <Button
-                        disabled={busy}
-                        onClick={() => post("downgrade")}
-                      >
+                      <Button disabled={busy} onClick={() => post("downgrade")}>
                         Downgrade to Free
                       </Button>
                     )}
@@ -138,11 +134,11 @@ export default function BillingPage() {
                   <BlockStack gap="400">
                     <BlockStack gap="200">
                       <Text as="h2" variant="headingMd">
-                        {PRO_NAME}{" "}
+                        {PLAN_NAME}{" "}
                         {isPro && <Badge tone="success">Current plan</Badge>}
                       </Text>
                       <Text as="p" variant="heading2xl">
-                        {PRO_PRICE}
+                        {PLAN_PRICE}
                         <Text as="span" variant="bodyMd" tone="subdued">
                           {" "}
                           / month
@@ -152,16 +148,16 @@ export default function BillingPage() {
                         7-day free trial included
                       </Text>
                       <List type="bullet">
-                        <List.Item>Everything in Free</List.Item>
-                        <List.Item>TikTok Pixel tracking</List.Item>
-                        <List.Item>Google Tag (GA4 & Google Ads) tracking</List.Item>
-                        <List.Item>Snapchat Pixel tracking</List.Item>
+                        <List.Item>Unlimited connected Pages</List.Item>
+                        <List.Item>Unlimited scheduled posts</List.Item>
+                        <List.Item>Post, Reel & Video publishing</List.Item>
+                        <List.Item>Facebook + Instagram publishing</List.Item>
                         <List.Item>Priority support</List.Item>
                       </List>
                     </BlockStack>
                     {isPro ? (
                       <Text as="p" variant="bodyMd" tone="subdued">
-                        You are on the {PRO_NAME} plan.
+                        You are on the {PLAN_NAME} plan.
                       </Text>
                     ) : (
                       <Button
@@ -170,7 +166,7 @@ export default function BillingPage() {
                         loading={busy}
                         onClick={() => post("upgrade")}
                       >
-                        Upgrade to {PRO_NAME}
+                        Upgrade to {PLAN_NAME}
                       </Button>
                     )}
                   </BlockStack>
