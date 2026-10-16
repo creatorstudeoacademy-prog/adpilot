@@ -333,6 +333,41 @@ function AgentUpload({ agentId, fileName }: { agentId: string; fileName: string 
   );
 }
 
+function AgentTest({ agentId }: { agentId: string }) {
+  const fetcher = useFetcher<{
+    ok: boolean;
+    agent?: string;
+    provider?: string;
+    latencyMs?: number;
+    output?: string;
+    error?: string;
+    message?: string;
+  }>();
+  const data = fetcher.data;
+  const testing = fetcher.state !== "idle";
+  return (
+    <InlineStack gap="200" blockAlign="center" wrap={false}>
+      <fetcher.Form action="/api/admin/ai-test" method="post">
+        <input type="hidden" name="agentId" value={agentId} />
+        <Button submit size="slim" loading={testing}>
+          Test
+        </Button>
+      </fetcher.Form>
+      {data && data.ok && (
+        <Text as="p" variant="bodySm" tone="success">
+          Live via {data.provider} ({((data.latencyMs ?? 0) / 1000).toFixed(1)}
+          s): &ldquo;{(data.output ?? "").slice(0, 60)}&rdquo;
+        </Text>
+      )}
+      {data && !data.ok && (
+        <Text as="p" variant="bodySm" tone="critical">
+          {data.message || data.error}
+        </Text>
+      )}
+    </InlineStack>
+  );
+}
+
 function ProvidersSection({
   providers,
   aiFailures,
@@ -821,13 +856,16 @@ function AgentsSection({
                   agentId={a.id}
                   fileName={a.rulesFileName ?? null}
                 />,
-                <Form key={`del-${a.id}`} method="post">
-                  <input type="hidden" name="intent" value="delete-agent" />
-                  <input type="hidden" name="agentId" value={a.id} />
-                  <Button submit tone="critical" size="slim">
-                    Delete
-                  </Button>
-                </Form>,
+                <InlineStack gap="200" blockAlign="center" wrap={false}>
+                  <AgentTest key={`test-${a.id}`} agentId={a.id} />
+                  <Form key={`del-${a.id}`} method="post">
+                    <input type="hidden" name="intent" value="delete-agent" />
+                    <input type="hidden" name="agentId" value={a.id} />
+                    <Button submit tone="critical" size="slim">
+                      Delete
+                    </Button>
+                  </Form>
+                </InlineStack>,
               ])}
             />
           )}
