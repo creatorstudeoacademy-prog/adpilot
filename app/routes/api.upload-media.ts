@@ -20,7 +20,7 @@ const EXT_BY_MIME: Record<string, string> = {
   "image/jpeg": "jpg",
   "image/png": "png",
   "image/gif": "gif",
-  "image/webp": "webp",
+  // WebP NOT supported: Meta ads API rejects WebP images.
   "video/mp4": "mp4",
   "video/quicktime": "mov",
   "video/webm": "webm",
@@ -49,6 +49,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const mime = file.type || "";
   const isVideo = mime.startsWith("video/");
   const isImage = mime.startsWith("image/");
+  if (mime === "image/webp") {
+    return json(
+      { ok: false, error: "WebP images are not supported by Meta ads. Please upload JPG or PNG." },
+      { status: 400 },
+    );
+  }
   if (!isVideo && !isImage) {
     return json(
       { ok: false, error: `Only images or videos allowed (got: ${mime || "unknown type"}).` },
