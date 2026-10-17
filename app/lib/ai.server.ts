@@ -68,6 +68,8 @@ export interface CaptionInput {
   topic: string;
   platform: string; // facebook | instagram
   tone: string; // Professional | Funny | Casual
+  /** awareness = engagement/brand building, sales = conversion-focused */
+  objective?: string; // awareness | sales
 }
 
 export interface CaptionResult {
@@ -185,10 +187,15 @@ function buildUserPrompt(input: CaptionInput): string {
     input.platform === "instagram"
       ? "Platform: Instagram (hashtags matter, emojis welcome)."
       : "Platform: Facebook (conversational, community feel).";
+  const objectiveHint =
+    input.objective === "sales"
+      ? "Goal: SALES — write to convert. Strong call to action (shop now, limited offer), urgency, benefit-focused. End with a clear buying CTA."
+      : "Goal: AWARENESS — write to engage. Storytelling, relatable hook, invite likes/comments/shares/follows. Soft CTA, no hard selling.";
   return `Write a caption for a social media post.
 Topic / product: "${input.topic}"
 ${platformHint}
 Tone: ${input.tone}
+${objectiveHint}
 Respond ONLY with JSON: {"caption": "...", "hashtags": ["...", "..."]}`;
 }
 
@@ -381,6 +388,78 @@ export async function generateCaption(input: CaptionInput): Promise<CaptionResul
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       console.error(`[adpilot ai] provider "${cfg.name}" failed: ${message}`);
+      failures.push(`${cfg.name}: ${message}`);
+    }
+  }
+  throw new Error(`AI_ALL_PROVIDERS_FAILED: ${failures.join(" | ")}`);
+}
+
+export interface ImageResult {
+  /** Direct (possibly temporary) URL of the generated image. */
+  imageUrl: string;
+  /** Provider slot name that served this generation. */
+  provider: string;
+}
+
+async function callOpenAIImage(
+  cfg: AIProviderConfig,
+  prompt: string,
+): Promise<string> {
+  const imageModel = env("AI_IMAGE_MODEL") || "dall-e-3";
+  const res = await fetch(`${cfg.baseUrl}/images/generations`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${cfg.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: imageModel,
+      prompt,
+      n: 1,
+      size: "1024x1024",
+      response_format: "url",
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `Image API error ${res.status}: ${text.slice(0, 200)}`,
+    );
+  }
+  const data = (await res.json()) as {
+    data?: Array<{ url?: string; b64_json?: string }>;
+  };
+  const url = data.data?.[0]?.url;
+  if (!url) throw new Error("Image API returned no image URL");
+  return url;
+}
+
+/**
+ * Generate an image with the first OpenAI-compatible provider that supports
+ * the /images/generations endpoint (e.g. OpenAI DALL-E). Anthropic-type
+ * providers are skipped — they cannot generate images.
+ * Set AI_IMAGE_MODEL to override the default "dall-e-3".
+ */
+export async function generateImage(prompt: string): Promise<ImageResult> {
+  const providers = await resolveProvidersAsync();
+  if (providers.length === 0) {
+    throw new Error(
+      "AI_NOT_CONFIGURED: no AI provider configured. Add an OpenAI-compatible provider for image generation (see AI_SETUP.md).",
+    );
+  }
+  const failures: string[] = [];
+  for (const cfg of providers) {
+    if (cfg.type !== "openai") {
+      failures.push(`${cfg.name}: image generation needs an OpenAI-compatible provider`);
+      continue;
+    }
+    try {
+      const imageUrl = await callOpenAIImage(cfg, prompt);
+      console.log(`[adpilot ai] image generated via provider "${cfg.name}"`);
+      return { imageUrl, provider: cfg.name };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      console.error(`[adpilot ai] image provider "${cfg.name}" failed: ${message}`);
       failures.push(`${cfg.name}: ${message}`);
     }
   }

@@ -8,6 +8,9 @@ export const POST_PUBLISH_FEE = 0.5;
 /** Fee per AI caption generation (USD). Deducted from wallet per generation. */
 export const AI_GENERATION_FEE = 0.2;
 
+/** Fee per AI image generation (USD). Deducted from wallet per generation. */
+export const AI_IMAGE_GENERATION_FEE = 0.4;
+
 /** Per-ad publish fees by campaign objective (USD). Deducted from wallet on publish. */
 export const OBJECTIVE_FEES: Record<string, number> = {
   AWARENESS: 2,

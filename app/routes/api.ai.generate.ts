@@ -18,7 +18,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  let body: { topic?: unknown; platform?: unknown; tone?: unknown } = {};
+  let body: { topic?: unknown; platform?: unknown; tone?: unknown; objective?: unknown } = {};
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -27,6 +27,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const topic = String(body.topic ?? "").trim();
   const platform = String(body.platform ?? "facebook").toLowerCase();
   const tone = String(body.tone ?? "Professional");
+  const objective = String(body.objective ?? "awareness").toLowerCase() === "sales" ? "sales" : "awareness";
 
   if (!topic) {
     return json(
@@ -64,11 +65,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   await deduct(shop, AI_GENERATION_FEE, "AI caption generation", undefined);
 
   try {
-    const result = await generateCaption({ topic, platform, tone });
+    const result = await generateCaption({ topic, platform, tone, objective });
     logActivity({
       shop,
       action: "ai_generate",
-      detail: `sector:caption provider:${result.provider}${result.agent ? ` agent:${result.agent}` : ""} platform:${platform} tone:${tone} topic:${topic.slice(0, 80)}`,
+      detail: `sector:caption provider:${result.provider}${result.agent ? ` agent:${result.agent}` : ""} platform:${platform} tone:${tone} objective:${objective} topic:${topic.slice(0, 80)}`,
       feeCharged: isFreeShop(shop) ? 0 : AI_GENERATION_FEE,
       agentName: result.agent,
     });

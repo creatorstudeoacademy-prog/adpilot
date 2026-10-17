@@ -1,0 +1,7 @@
+intro|Meet AdPilot — your social media command center for Shopify.
+s1|Step one: connect your Facebook Page. Click Connect Facebook, authorize once, and your Pages and linked Instagram accounts come along automatically.
+s2|Step two: compose your post. Head to Compose, write your caption, and add photos or video.
+s3|Step three: publish instantly, or schedule for later — to Facebook and Instagram, all from inside your Shopify admin.
+s4|Step four: run ads the easy way. Open the Ads Manager, pick an objective, set a budget, and AdPilot handles the rest — even full-funnel campaigns in a single click.
+s5|Step five: top up your wallet. There are no monthly fees — you pay only for what you use, starting at fifty cents per published post.
+outro|AdPilot — Social Media Command. Free to install. Start growing your store's social presence today.

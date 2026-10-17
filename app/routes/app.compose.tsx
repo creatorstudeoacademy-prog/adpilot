@@ -219,8 +219,46 @@ export default function ComposePage() {
   // AI caption generator state
   const [aiTopic, setAiTopic] = useState("");
   const [aiTone, setAiTone] = useState("Professional");
+  const [aiObjective, setAiObjective] = useState("awareness");
   const [aiBusy, setAiBusy] = useState(false);
   const [aiError, setAiError] = useState("");
+
+  // AI image generator state
+  const [imgPrompt, setImgPrompt] = useState("");
+  const [imgBusy, setImgBusy] = useState(false);
+  const [imgError, setImgError] = useState("");
+
+  const handleImageGenerate = async () => {
+    if (!imgPrompt.trim() || imgBusy) return;
+    setImgBusy(true);
+    setImgError("");
+    try {
+      const res = await fetch("/api/ai/generate-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: imgPrompt.trim() }),
+      });
+      const data = (await res.json()) as {
+        ok: boolean;
+        url?: string;
+        message?: string;
+        error?: string;
+      };
+      if (!data.ok || !data.url) {
+        setImgError(
+          data.error === "AI_NOT_CONFIGURED"
+            ? "Image generation is unavailable right now — please try again later."
+            : data.message || "Image generation failed. Please try again.",
+        );
+        return;
+      }
+      setMediaUrl(data.url);
+    } catch {
+      setImgError("Could not reach the image service. Please try again.");
+    } finally {
+      setImgBusy(false);
+    }
+  };
 
   const handleAiGenerate = async () => {
     if (!aiTopic.trim() || aiBusy) return;
@@ -234,6 +272,7 @@ export default function ComposePage() {
           topic: aiTopic.trim(),
           platform: platforms[0] ?? "facebook",
           tone: aiTone,
+          objective: aiObjective,
         }),
       });
       const data = (await res.json()) as {
@@ -333,6 +372,16 @@ export default function ComposePage() {
                           value={aiTone}
                           onChange={setAiTone}
                         />
+                        <Select
+                          label="Post goal"
+                          options={[
+                            { label: "Awareness — engage & grow audience", value: "awareness" },
+                            { label: "Sales — convert & drive purchases", value: "sales" },
+                          ]}
+                          value={aiObjective}
+                          onChange={setAiObjective}
+                          helpText="The AI writes the caption to match your goal."
+                        />
                       </FormLayout>
                       {aiError && <Banner tone="critical">{aiError}</Banner>}
                       <Button
@@ -371,9 +420,38 @@ export default function ComposePage() {
                           value={mediaUrl}
                           onChange={setMediaUrl}
                           placeholder="https://… direct link to image or video"
-                          helpText="Paste a direct link to an image or video file."
+                          helpText="Paste a direct link to an image or video file — or generate one below."
                           autoComplete="off"
                         />
+                        {mediaUrl && (
+                          <img
+                            src={mediaUrl}
+                            alt="Post media preview"
+                            style={{
+                              maxWidth: "100%",
+                              maxHeight: 220,
+                              borderRadius: 8,
+                              border: "1px solid #e1e3e5",
+                            }}
+                          />
+                        )}
+                        <TextField
+                          label="Generate an image"
+                          value={imgPrompt}
+                          onChange={setImgPrompt}
+                          placeholder="e.g. a happy dog wearing sunglasses on a beach at sunset"
+                          autoComplete="off"
+                        />
+                        {imgError && <Banner tone="critical">{imgError}</Banner>}
+                        <Button
+                          variant="secondary"
+                          onClick={handleImageGenerate}
+                          loading={imgBusy}
+                          disabled={imgBusy || !imgPrompt.trim()}
+                          fullWidth
+                        >
+                          {imgBusy ? "Generating…" : "Generate image ($0.40)"}
+                        </Button>
                         <Select
                           label="Post type"
                           options={[
