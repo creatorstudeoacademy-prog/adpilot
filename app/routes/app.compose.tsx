@@ -212,10 +212,38 @@ export default function ComposePage() {
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
   const [content, setContent] = useState("");
   const [mediaUrl, setMediaUrl] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
   const [mediaType, setMediaType] = useState("post");
   const [platforms, setPlatforms] = useState<string[]>(["facebook"]);
   const [publishNow, setPublishNow] = useState(true);
   const [scheduledAt, setScheduledAt] = useState("");
+
+  const uploadMedia = async (file: File) => {
+    setUploading(true);
+    setUploadError("");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/upload-media", {
+        method: "POST",
+        body: formData,
+      });
+      const text = await res.text();
+      let data: { ok: boolean; url?: string; error?: string };
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error(`Upload failed (server error: ${text.slice(0, 100)})`);
+      }
+      if (!data.ok) throw new Error(data.error || "Upload failed.");
+      if (data.url) setMediaUrl(data.url);
+    } catch (e) {
+      setUploadError(e instanceof Error ? e.message : "Upload failed.");
+    } finally {
+      setUploading(false);
+    }
+  };
 
   // AI caption generator state
   const [aiTopic, setAiTopic] = useState("");
@@ -513,9 +541,40 @@ export default function ComposePage() {
                           value={mediaUrl}
                           onChange={setMediaUrl}
                           placeholder="https://… direct link to image or video"
-                          helpText="Paste a direct link to an image or video file — or generate one below."
+                          helpText="Paste a direct link — or upload a file below."
                           autoComplete="off"
                         />
+                        <InlineStack gap="200" align="start" blockAlign="center">
+                          <Button
+                            loading={uploading}
+                            onClick={() =>
+                              document.getElementById("compose-media-upload")?.click()
+                            }
+                          >
+                            {uploading ? "Uploading…" : "Upload image/video"}
+                          </Button>
+                          <input
+                            id="compose-media-upload"
+                            type="file"
+                            accept="image/jpeg,image/png,image/gif,video/mp4,video/quicktime"
+                            style={{ display: "none" }}
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) uploadMedia(f);
+                              e.target.value = "";
+                            }}
+                          />
+                          {mediaUrl && (
+                            <Text as="span" variant="bodySm" tone="success">
+                              ✓ Media set
+                            </Text>
+                          )}
+                        </InlineStack>
+                        {uploadError && (
+                          <Banner tone="critical">
+                            <p>{uploadError}</p>
+                          </Banner>
+                        )}
                         {mediaUrl && (
                           <img
                             src={mediaUrl}
