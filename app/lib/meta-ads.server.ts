@@ -18,7 +18,7 @@ async function marketingFetch(
   path: string,
   accessToken: string,
   params: Record<string, string>,
-  method: "GET" | "POST" = "POST",
+  method: "GET" | "POST" | "DELETE" = "POST",
 ): Promise<any> {
   const url =
     method === "GET"
@@ -27,7 +27,9 @@ async function marketingFetch(
   const body =
     method === "POST"
       ? new URLSearchParams({ access_token: accessToken, ...params })
-      : undefined;
+      : method === "DELETE"
+        ? new URLSearchParams({ access_token: accessToken })
+        : undefined;
 
   const res = await fetch(url, { method, body });
   const data = (await res.json()) as GraphError & Record<string, any>;
@@ -288,6 +290,42 @@ export async function getCampaigns(adAccountId: string, accessToken: string) {
   }>;
 }
 
+/** Fetch performance insights for a campaign (last 30 days). */
+export async function getCampaignInsights(
+  campaignId: string,
+  accessToken: string,
+): Promise<{
+  impressions: number;
+  clicks: number;
+  spend: number;
+  ctr: number;
+  cpc: number;
+  cpm: number;
+  reach?: number;
+  actions?: Array<{ action_type: string; value: string }>;
+}> {
+  const data = await marketingFetch(
+    `/${campaignId}/insights`,
+    accessToken,
+    {
+      fields: "impressions,clicks,spend,ctr,cpc,cpm,reach,actions",
+      date_preset: "last_30d",
+    },
+    "GET",
+  );
+  const row = data.data?.[0] ?? {};
+  return {
+    impressions: Number(row.impressions ?? 0),
+    clicks: Number(row.clicks ?? 0),
+    spend: Number(row.spend ?? 0),
+    ctr: Number(row.ctr ?? 0),
+    cpc: Number(row.cpc ?? 0),
+    cpm: Number(row.cpm ?? 0),
+    reach: row.reach ? Number(row.reach) : undefined,
+    actions: row.actions,
+  };
+}
+
 /** Pause or resume a campaign. */
 export async function toggleCampaign(
   campaignId: string,
@@ -297,6 +335,14 @@ export async function toggleCampaign(
   await marketingFetch(`/${campaignId}`, accessToken, {
     status: active ? "ACTIVE" : "PAUSED",
   });
+}
+
+/** Delete a campaign from Meta (permanent). */
+export async function deleteCampaign(
+  campaignId: string,
+  accessToken: string,
+): Promise<void> {
+  await marketingFetch(`/${campaignId}`, accessToken, {}, "DELETE");
 }
 
 /* ------------------------------------------------------------------ */

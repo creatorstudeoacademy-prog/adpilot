@@ -1,5 +1,6 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
+import { useState } from "react";
 import { useLoaderData, useSubmit, useNavigation, useSearchParams } from "@remix-run/react";
 import {
   Badge,
@@ -15,7 +16,7 @@ import {
 
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import { getCampaigns, toggleCampaign } from "../lib/meta-ads.server";
+import { deleteCampaign, getCampaigns, toggleCampaign } from "../lib/meta-ads.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -99,6 +100,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
   const form = await request.formData();
+  const intent = String(form.get("intent") ?? "toggle");
   const campaignId = String(form.get("campaignId") ?? "");
   const activate = form.get("activate") === "1";
 
@@ -111,6 +113,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   try {
+    if (intent === "delete") {
+      await deleteCampaign(campaign.metaCampaignId, campaign.adAccount.accessToken);
+      await prisma.campaign.delete({ where: { id: campaign.id } });
+      return json({ ok: true, deleted: true });
+    }
     await toggleCampaign(campaign.metaCampaignId, campaign.adAccount.accessToken, activate);
     await prisma.campaign.update({
       where: { id: campaign.id },
@@ -151,11 +158,41 @@ export default function Campaigns() {
   const submit = useSubmit();
   const nav = useNavigation();
   const busy = nav.state === "submitting";
+  const [analyzing, setAnalyzing] = useState<string | null>(null);
+  const [analysis, setAnalysis] = useState<{ id: string; text: string } | null>(null);
+
+  const analyze = async (id: string) => {
+    if (analyzing) return;
+    setAnalyzing(id);
+    setAnalysis(null);
+    try {
+      const res = await fetch("/api/ai/analyze-campaign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ campaignId: id }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Analysis failed.");
+      setAnalysis({ id, text: data.analysis });
+    } catch (e) {
+      setAnalysis({ id, text: `Error: ${e instanceof Error ? e.message : "failed"}` });
+    } finally {
+      setAnalyzing(null);
+    }
+  };
 
   const toggle = (id: string, activate: boolean) => {
     const data = new FormData();
+    data.set("intent", "toggle");
     data.set("campaignId", id);
     data.set("activate", activate ? "1" : "0");
+    submit(data, { method: "post" });
+  };
+
+  const remove = (id: string) => {
+    const data = new FormData();
+    data.set("intent", "delete");
+    data.set("campaignId", id);
     submit(data, { method: "post" });
   };
 
@@ -165,19 +202,45 @@ export default function Campaigns() {
     statusBadge(c.status),
     `$${c.dailyBudget.toFixed(2)}/day`,
     c.adAccountName,
-    c.status === "active" ? (
-      <Button size="slim" disabled={busy} onClick={() => toggle(c.id, false)}>
-        Pause
+    <InlineStack key={c.id} gap="200">
+      {c.status === "active" ? (
+        <Button size="slim" disabled={busy} onClick={() => toggle(c.id, false)}>
+          Pause
+        </Button>
+      ) : c.status === "paused" ? (
+        <Button size="slim" disabled={busy} onClick={() => toggle(c.id, true)}>
+          Resume
+        </Button>
+      ) : (
+        <Text as="span" variant="bodySm" tone="subdued">
+          —
+        </Text>
+      )}
+      {(c.status === "active" || c.status === "paused") && (
+        <Button
+          size="slim"
+          tone="critical"
+          variant="plain"
+          disabled={busy}
+          onClick={() => {
+            if (window.confirm(`Delete "${c.name}" permanently from Meta?`)) {
+              remove(c.id);
+            }
+          }}
+        >
+          Delete
+        </Button>
+      )}
+      <Button
+        size="slim"
+        variant="plain"
+        disabled={analyzing === c.id}
+        loading={analyzing === c.id}
+        onClick={() => analyze(c.id)}
+      >
+        📊 Analyze
       </Button>
-    ) : c.status === "paused" ? (
-      <Button size="slim" disabled={busy} onClick={() => toggle(c.id, true)}>
-        Resume
-      </Button>
-    ) : (
-      <Text as="span" variant="bodySm" tone="subdued">
-        —
-      </Text>
-    ),
+    </InlineStack>,
   ]);
 
   const metaRows = metaCampaigns.map((c) => [
@@ -220,6 +283,28 @@ export default function Campaigns() {
             />
           )}
         </Card>
+        {analysis && (
+          <Card>
+            <BlockStack gap="300">
+              <InlineStack align="space-between" blockAlign="center">
+                <Text as="h2" variant="headingMd">
+                  📊 AI Campaign Analysis
+                </Text>
+                <Button variant="plain" onClick={() => setAnalysis(null)}>
+                  Close
+                </Button>
+              </InlineStack>
+              <Text as="p" variant="bodyMd">
+                {analysis.text.split("\n").map((line, i) => (
+                  <span key={i}>
+                    {line}
+                    <br />
+                  </span>
+                ))}
+              </Text>
+            </BlockStack>
+          </Card>
+        )}
         {metaFetchError && (
           <Banner tone="warning">
             Could not load live Meta campaigns: {metaFetchError}
