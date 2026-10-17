@@ -74,18 +74,7 @@ const AUDIENCE_TYPES = [
   },
 ] as const;
 
-const COUNTRY_OPTIONS = [
-  { label: "United States", value: "US" },
-  { label: "United Kingdom", value: "GB" },
-  { label: "Canada", value: "CA" },
-  { label: "Australia", value: "AU" },
-  { label: "Germany", value: "DE" },
-  { label: "France", value: "FR" },
-  { label: "India", value: "IN" },
-  { label: "Bangladesh", value: "BD" },
-  { label: "United Arab Emirates", value: "AE" },
-  { label: "Saudi Arabia", value: "SA" },
-];
+import { COUNTRIES as COUNTRY_OPTIONS } from "../lib/countries";
 
 const RETENTION_OPTIONS = [
   { label: "30 days", value: "30" },

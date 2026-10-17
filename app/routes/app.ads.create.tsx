@@ -35,6 +35,7 @@ import {
   calculatePublishFee,
 } from "../lib/pricing";
 import { NavButton } from "../components/NavButton";
+import { COUNTRIES } from "../lib/countries";
 
 const CTA_OPTIONS = [
   { label: "Shop Now", value: "SHOP_NOW" },
