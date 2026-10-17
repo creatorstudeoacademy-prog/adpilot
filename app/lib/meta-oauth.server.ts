@@ -11,7 +11,7 @@ import { createHmac, timingSafeEqual } from "crypto";
  * shopify.authenticate.admin().
  */
 
-const EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
+const EXPIRY_MS = 60 * 60 * 1000; // 60 minutes — page may sit open a while before click
 
 function secret(): string {
   const s = process.env.SHOPIFY_API_SECRET;
