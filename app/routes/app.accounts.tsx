@@ -189,6 +189,31 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ ok: true, message: pixelId ? `Pixel ${pixelId} saved.` : "Pixel removed." });
   }
 
+  if (intent === "save_manual_token") {
+    const token = String(formData.get("token") ?? "").trim();
+    if (!token) {
+      return json({ ok: false, message: "Token is required." });
+    }
+    // Validate the token by fetching /me
+    try {
+      const res = await fetch(
+        `https://graph.facebook.com/v21.0/me?access_token=${encodeURIComponent(token)}`
+      );
+      const data = await res.json();
+      if (data.error) {
+        return json({ ok: false, message: `Invalid token: ${data.error.message}` });
+      }
+    } catch {
+      return json({ ok: false, message: "Could not validate token." });
+    }
+    await prisma.metaUserToken.upsert({
+      where: { shop },
+      create: { shop, accessToken: token },
+      update: { accessToken: token },
+    });
+    return json({ ok: true, message: "Token saved. You can now connect ad accounts." });
+  }
+
   if (intent === "disconnect_ad") {
     const id = String(formData.get("id") ?? "");
     await prisma.adAccount.deleteMany({ where: { id, shop } });
@@ -293,6 +318,63 @@ function PixelCard({
           <Text as="p" variant="bodySm" tone="success">
             ✓ Pixel {currentPixelId} connected
           </Text>
+        )}
+      </BlockStack>
+    </Card>
+  );
+}
+
+function ManualTokenForm({ busy }: { busy: boolean }) {
+  const [token, setToken] = useState("");
+  const [show, setShow] = useState(false);
+  const submit = useSubmit();
+  const save = () => {
+    const data = new FormData();
+    data.set("intent", "save_manual_token");
+    data.set("token", token);
+    submit(data, { method: "post" });
+  };
+  return (
+    <Card>
+      <BlockStack gap="200">
+        <InlineStack gap="200" blockAlign="center">
+          <Text as="h3" variant="headingSm">
+            Or paste a User Token manually
+          </Text>
+          <Button variant="plain" onClick={() => setShow(!show)}>
+            {show ? "Hide" : "Show"}
+          </Button>
+        </InlineStack>
+        {show && (
+          <BlockStack gap="200">
+            <Text as="p" variant="bodySm" tone="subdued">
+              Generate a token at{" "}
+              <a
+                href="https://developers.facebook.com/tools/explorer/"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Graph API Explorer
+              </a>{" "}
+              — select app "AdPilot 2", add permissions: pages_show_list,
+              pages_read_engagement, pages_manage_posts, instagram_basic,
+              instagram_content_publish, ads_read, ads_management, business_management.
+              Then click "Generate Access Token" and paste it below.
+            </Text>
+            <TextField
+              label="User Access Token"
+              value={token}
+              onChange={setToken}
+              placeholder="EAA..."
+              autoComplete="off"
+              type="password"
+            />
+            <InlineStack gap="200">
+              <Button disabled={busy || !token.trim()} onClick={save}>
+                Save Token
+              </Button>
+            </InlineStack>
+          </BlockStack>
         )}
       </BlockStack>
     </Card>
@@ -413,6 +495,11 @@ export default function AccountsPage() {
               linked to a Page come along automatically).
             </Text>
           </div>
+          {!fbConnected && (
+            <div style={{ marginTop: 16 }}>
+              <ManualTokenForm busy={busy} />
+            </div>
+          )}
         </Card>
 
         {totalConnected === 0 ? (
