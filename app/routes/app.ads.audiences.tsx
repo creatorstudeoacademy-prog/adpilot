@@ -774,7 +774,7 @@ function AutoCreateCard({
   adAccounts,
   busy,
 }: {
-  adAccounts: Array<{ id: string; name: string }>;
+  adAccounts: Array<{ id: string; adAccountName: string; adAccountId: string }>;
   busy: boolean;
 }) {
   const [objective, setObjective] = useState("TRAFFIC");
@@ -821,7 +821,10 @@ function AutoCreateCard({
           <Grid.Cell>
             <Select
               label="Ad account"
-              options={adAccounts.map((a) => ({ label: a.name, value: a.id }))}
+              options={adAccounts.map((a) => ({
+                label: `${a.adAccountName} (${a.adAccountId})`,
+                value: a.id,
+              }))}
               value={adAccountDbId}
               onChange={setAdAccountDbId}
             />
