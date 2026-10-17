@@ -319,6 +319,29 @@ export default function CreateCampaign() {
   const [aiFillError, setAiFillError] = useState("");
   const [uploading, setUploading] = useState<number | null>(null);
   const [uploadError, setUploadError] = useState("");
+  const [suggestingUrl, setSuggestingUrl] = useState<number | null>(null);
+  const [urlSuggestion, setUrlSuggestion] = useState("");
+
+  const suggestUrl = async (index: number) => {
+    if (suggestingUrl !== null || !name.trim()) return;
+    setSuggestingUrl(index);
+    setUrlSuggestion("");
+    try {
+      const res = await fetch("/api/ai/suggest-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic: name.trim(), objective }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Suggestion failed.");
+      updateCreative(index, { destinationUrl: data.url });
+      if (data.reason) setUrlSuggestion(`${data.label}: ${data.reason}`);
+    } catch (e) {
+      setUrlSuggestion(e instanceof Error ? e.message : "Suggestion failed.");
+    } finally {
+      setSuggestingUrl(null);
+    }
+  };
 
   const uploadMedia = async (index: number, file: File) => {
     setUploading(index);
@@ -758,7 +781,23 @@ export default function CreateCampaign() {
                     onChange={(v) => updateCreative(index, { destinationUrl: v })}
                     placeholder="https://yourstore.com/products/..."
                     autoComplete="off"
+                    helpText="Where the ad sends people — AI can suggest the best page, or paste manually."
                   />
+                  <InlineStack gap="200" blockAlign="center">
+                    <Button
+                      size="slim"
+                      disabled={suggestingUrl === index || !name.trim()}
+                      loading={suggestingUrl === index}
+                      onClick={() => suggestUrl(index)}
+                    >
+                      🤖 Suggest best URL
+                    </Button>
+                    {urlSuggestion && suggestingUrl === null && (
+                      <Text as="span" variant="bodySm" tone="subdued">
+                        {urlSuggestion}
+                      </Text>
+                    )}
+                  </InlineStack>
                   <Select
                     label="Call-to-action button"
                     options={CTA_OPTIONS}
