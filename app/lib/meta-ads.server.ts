@@ -911,7 +911,7 @@ export async function createFullFunnel(
       stage: "BOF" as const,
       objective: "SALES",
       budgetShare: 0.2,
-      optimizationGoal: "OFFSITE_CONVERSIONS",
+      optimizationGoal: "LINK_CLICKS",
       targeting: () =>
         byStage("BOF").audienceId && !byStage("BOF").audienceFallback
           ? {
