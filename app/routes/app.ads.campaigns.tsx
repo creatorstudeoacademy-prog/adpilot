@@ -10,6 +10,7 @@ import {
   Card,
   DataTable,
   EmptyState,
+  InlineStack,
   Page,
   Text,
 } from "@shopify/polaris";
