@@ -105,6 +105,7 @@ export async function createAdSet(
   endDate?: Date | null,
   customTargeting?: Record<string, unknown>,
   objective?: string,
+  pixelId?: string | null,
 ): Promise<string> {
   // Optimization goal must match the campaign objective.
   const metaObjective = OBJECTIVE_MAP[objective ?? ""] ?? "";
@@ -115,10 +116,15 @@ export async function createAdSet(
   } else if (metaObjective === "OUTCOME_ENGAGEMENT" || objective === "ENGAGEMENT") {
     optimizationGoal = "POST_ENGAGEMENT";
   } else if (metaObjective === "OUTCOME_SALES" || objective === "SALES") {
-    // For Sales, use LINK_CLICKS as a safe default if no pixel is configured.
-    // Full conversion optimization requires a pixel + promoted_object.
-    optimizationGoal = "LINK_CLICKS";
-    billingEvent = "IMPRESSIONS";
+    if (pixelId) {
+      // Full conversion optimization with pixel.
+      optimizationGoal = "OFFSITE_CONVERSIONS";
+      billingEvent = "IMPRESSIONS";
+    } else {
+      // Safe default if no pixel configured.
+      optimizationGoal = "LINK_CLICKS";
+      billingEvent = "IMPRESSIONS";
+    }
   }
   const params: Record<string, string> = {
     name,
@@ -138,6 +144,13 @@ export async function createAdSet(
   };
   if (startDate) params.start_time = startDate.toISOString();
   if (endDate) params.end_time = endDate.toISOString();
+  // For Sales with pixel: add promoted_object for conversion tracking.
+  if (pixelId && (metaObjective === "OUTCOME_SALES" || objective === "SALES")) {
+    params.promoted_object = JSON.stringify({
+      pixel_id: pixelId,
+      custom_event_type: "PURCHASE",
+    });
+  }
 
   const data = await marketingFetch(`/act_${adAccountId}/adsets`, accessToken, params);
   return data.id as string;
