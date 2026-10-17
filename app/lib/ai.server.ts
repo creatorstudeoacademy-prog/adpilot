@@ -394,6 +394,93 @@ export async function generateCaption(input: CaptionInput): Promise<CaptionResul
   throw new Error(`AI_ALL_PROVIDERS_FAILED: ${failures.join(" | ")}`);
 }
 
+const AD_CREATIVE_PROMPT = `You are an expert Facebook/Instagram ad copywriter for e-commerce brands.
+Write high-converting ad copy.
+Rules:
+- Headline: punchy, under 60 characters, clear benefit or offer.
+- Primary text: 1-3 sentences, conversational, clear call to action, 1-2 emojis max.
+- Description: one short supporting line, under 100 characters.
+- Match the requested tone and campaign objective.
+- Never invent fake discounts, fake reviews, or specific prices.
+Respond ONLY with JSON: {"headline": "...", "primaryText": "...", "description": "..."}`;
+
+export interface AdCreativeInput {
+  topic: string;
+  objective: string;
+  tone?: string;
+}
+
+export interface AdCreativeResult {
+  headline: string;
+  primaryText: string;
+  description: string;
+  provider: string;
+  agent?: string;
+}
+
+/** Generate ad headline + primary text + description via the ad_copy sector. */
+export async function generateAdCreative(
+  input: AdCreativeInput,
+): Promise<AdCreativeResult> {
+  const { getAgentsForSector, getMainAgent, generateForSector } = await import(
+    "./agents.server"
+  );
+  const [specialized, main] = await Promise.all([
+    getAgentsForSector("ad_copy"),
+    getMainAgent(),
+  ]);
+  const userPrompt =
+    `Write Facebook/Instagram ad copy.\n` +
+    `Campaign objective: ${input.objective}\n` +
+    `Tone: ${input.tone ?? "Professional"}\n` +
+    `What the ad is about: ${input.topic}`;
+  if (specialized.length > 0 || main) {
+    const { text, agent, provider } = await generateForSector("ad_copy", {
+      systemPrompt: AD_CREATIVE_PROMPT,
+      userPrompt,
+    });
+    const parsed = extractJson(text) as Partial<AdCreativeResult>;
+    console.log(
+      `[adpilot ai] ad creative generated via agent "${agent}" (provider "${provider}")`,
+    );
+    return {
+      headline: String(parsed.headline ?? "").slice(0, 120),
+      primaryText: String(parsed.primaryText ?? "").slice(0, 2000),
+      description: String(parsed.description ?? "").slice(0, 200),
+      provider,
+      agent,
+    };
+  }
+
+  const providers = await resolveProvidersAsync();
+  if (providers.length === 0) {
+    throw new Error(
+      "AI_NOT_CONFIGURED: no AI provider configured. Add one in /app/admin → AI providers.",
+    );
+  }
+  const failures: string[] = [];
+  for (const cfg of providers) {
+    try {
+      const text =
+        cfg.type === "anthropic"
+          ? await callAnthropicText(cfg, AD_CREATIVE_PROMPT, userPrompt)
+          : await callOpenAIText(cfg, AD_CREATIVE_PROMPT, userPrompt);
+      const parsed = extractJson(text) as Partial<AdCreativeResult>;
+      console.log(`[adpilot ai] ad creative generated via provider "${cfg.name}"`);
+      return {
+        headline: String(parsed.headline ?? "").slice(0, 120),
+        primaryText: String(parsed.primaryText ?? "").slice(0, 2000),
+        description: String(parsed.description ?? "").slice(0, 200),
+        provider: cfg.name,
+      };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      failures.push(`${cfg.name}: ${message}`);
+    }
+  }
+  throw new Error(`AI_ALL_PROVIDERS_FAILED: ${failures.join(" | ")}`);
+}
+
 export interface ImageResult {
   /** Direct (possibly temporary) URL of the generated image. */
   imageUrl: string;

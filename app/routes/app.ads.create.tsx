@@ -314,6 +314,65 @@ export default function CreateCampaign() {
   const [country, setCountry] = useState("US");
   const [ageMin, setAgeMin] = useState("18");
   const [ageMax, setAgeMax] = useState("65");
+  const [aiFilling, setAiFilling] = useState<number | null>(null);
+  const [aiFillError, setAiFillError] = useState("");
+  const [uploading, setUploading] = useState<number | null>(null);
+  const [uploadError, setUploadError] = useState("");
+
+  const uploadMedia = async (index: number, file: File) => {
+    setUploading(index);
+    setUploadError("");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/upload-media", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Upload failed.");
+      if (data.type === "video") {
+        updateCreative(index, { imageUrl: data.url });
+      } else {
+        updateCreative(index, { imageUrl: data.url });
+      }
+    } catch (e) {
+      setUploadError(e instanceof Error ? e.message : "Upload failed.");
+    } finally {
+      setUploading(null);
+    }
+  };
+
+  const fillCreativeWithAI = async (index: number) => {
+    if (aiFilling !== null || !name.trim()) return;
+    setAiFilling(index);
+    setAiFillError("");
+    try {
+      const res = await fetch("/api/ai/generate-creative", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic: name.trim(), objective, tone: "Professional" }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "AI fill failed.");
+      setCreatives((prev) =>
+        prev.map((c, i) =>
+          i === index
+            ? {
+                ...c,
+                headline: data.headline || c.headline,
+                primaryText: data.primaryText || c.primaryText,
+                description: data.description || c.description,
+              }
+            : c,
+        ),
+      );
+    } catch (e) {
+      setAiFillError(e instanceof Error ? e.message : "AI fill failed.");
+    } finally {
+      setAiFilling(null);
+    }
+  };
 
   const budgetNum = parseFloat(dailyBudget) || 0;
   const fee = calculatePublishFee(objective, adSetCount, creatives.length);
@@ -592,6 +651,7 @@ export default function CreateCampaign() {
 
         {step === 3 && (
           <BlockStack gap="400">
+            {aiFillError && <Banner tone="critical">{aiFillError}</Banner>}
             {creatives.map((creative, index) => (
               <Card key={index}>
                 <BlockStack gap="400">
@@ -604,15 +664,25 @@ export default function CreateCampaign() {
                         </Text>
                       )}
                     </Text>
-                    {creatives.length > 1 && (
+                    <InlineStack gap="200">
                       <Button
-                        variant="plain"
-                        tone="critical"
-                        onClick={() => removeCreative(index)}
+                        size="slim"
+                        disabled={aiFilling === index || !name.trim()}
+                        loading={aiFilling === index}
+                        onClick={() => fillCreativeWithAI(index)}
                       >
-                        Remove
+                        ✨ Fill with AI ($0.20)
                       </Button>
-                    )}
+                      {creatives.length > 1 && (
+                        <Button
+                          variant="plain"
+                          tone="critical"
+                          onClick={() => removeCreative(index)}
+                        >
+                          Remove
+                        </Button>
+                      )}
+                    </InlineStack>
                   </InlineStack>
                   <TextField
                     label="Headline"
@@ -641,8 +711,42 @@ export default function CreateCampaign() {
                     onChange={(v) => updateCreative(index, { imageUrl: v })}
                     placeholder="https://..."
                     autoComplete="off"
-                    helpText="A direct link to your ad image (JPG/PNG)."
+                    helpText="A direct link to your ad image (JPG/PNG) — or upload below."
                   />
+                  <InlineStack gap="200" blockAlign="center">
+                    <label
+                      style={{
+                        display: "inline-block",
+                        padding: "8px 16px",
+                        border: "1px solid #c9cccf",
+                        borderRadius: "8px",
+                        cursor: uploading === index ? "wait" : "pointer",
+                        background: "#fff",
+                        fontSize: "14px",
+                      }}
+                    >
+                      {uploading === index ? "Uploading…" : "📤 Upload image/video"}
+                      <input
+                        type="file"
+                        accept="image/*,video/*"
+                        style={{ display: "none" }}
+                        disabled={uploading === index}
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) uploadMedia(index, f);
+                          e.target.value = "";
+                        }}
+                      />
+                    </label>
+                    {creative.imageUrl && (
+                      <Text as="span" variant="bodySm" tone="success">
+                        ✓ Media set
+                      </Text>
+                    )}
+                  </InlineStack>
+                  {uploadError && uploading === null && (
+                    <Banner tone="critical">{uploadError}</Banner>
+                  )}
                   <TextField
                     label="Destination URL"
                     value={creative.destinationUrl}
