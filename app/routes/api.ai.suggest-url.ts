@@ -31,25 +31,30 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ ok: false, error: "Campaign name is required." }, { status: 400 });
   }
 
-  // Fetch products + collections for matching.
-  const [prodRes, collRes] = await Promise.all([
-    admin.graphql(
-      `#graphql
-      query { products(first: 30, sortKey: UPDATED_AT, reverse: true) {
-        edges { node { title handle onlineStoreUrl } } } }`,
-    ),
-    admin.graphql(
-      `#graphql
-      query { collections(first: 20) {
-        edges { node { title handle } } } }`,
-    ),
-  ]);
-  const prodJson = await prodRes.json();
-  const collJson = await collRes.json();
-  const products: Array<{ title: string; handle: string; onlineStoreUrl?: string }> =
-    prodJson?.data?.products?.edges?.map((e: any) => e.node) ?? [];
-  const collections: Array<{ title: string; handle: string }> =
-    collJson?.data?.collections?.edges?.map((e: any) => e.node) ?? [];
+  // Fetch products + collections for matching. If the API denies access
+  // (missing scopes), fall back to homepage suggestion.
+  let products: Array<{ title: string; handle: string; onlineStoreUrl?: string }> = [];
+  let collections: Array<{ title: string; handle: string }> = [];
+  try {
+    const [prodRes, collRes] = await Promise.all([
+      admin.graphql(
+        `#graphql
+        query { products(first: 30, sortKey: UPDATED_AT, reverse: true) {
+          edges { node { title handle onlineStoreUrl } } } }`,
+      ),
+      admin.graphql(
+        `#graphql
+        query { collections(first: 20) {
+          edges { node { title handle } } } }`,
+      ),
+    ]);
+    const prodJson = await prodRes.json();
+    const collJson = await collRes.json();
+    products = prodJson?.data?.products?.edges?.map((e: any) => e.node) ?? [];
+    collections = collJson?.data?.collections?.edges?.map((e: any) => e.node) ?? [];
+  } catch (e) {
+    console.warn("[suggest-url] catalog fetch failed, using homepage fallback:", e instanceof Error ? e.message : e);
+  }
 
   const shopDomain = shop.replace(".myshopify.com", "");
   const homepage = `https://${shopDomain}.myshopify.com`;
