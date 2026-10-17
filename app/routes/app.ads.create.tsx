@@ -330,11 +330,15 @@ export default function CreateCampaign() {
         method: "POST",
         body: formData,
       });
-      const data = await res.json();
+      const text = await res.text();
+      let data: { ok: boolean; url?: string; type?: string; error?: string };
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error(`Upload failed (server error: ${text.slice(0, 100)})`);
+      }
       if (!data.ok) throw new Error(data.error || "Upload failed.");
-      if (data.type === "video") {
-        updateCreative(index, { imageUrl: data.url });
-      } else {
+      if (data.url) {
         updateCreative(index, { imageUrl: data.url });
       }
     } catch (e) {
@@ -715,30 +719,30 @@ export default function CreateCampaign() {
                     helpText="A direct link to your ad image (JPG/PNG) — or upload below."
                   />
                   <InlineStack gap="200" blockAlign="center">
-                    <label
-                      style={{
-                        display: "inline-block",
-                        padding: "8px 16px",
-                        border: "1px solid #c9cccf",
-                        borderRadius: "8px",
-                        cursor: uploading === index ? "wait" : "pointer",
-                        background: "#fff",
-                        fontSize: "14px",
-                      }}
+                    <Button
+                      size="slim"
+                      disabled={uploading === index}
+                      loading={uploading === index}
+                      onClick={() =>
+                        document
+                          .getElementById(`media-upload-${index}`)
+                          ?.click()
+                      }
                     >
-                      {uploading === index ? "Uploading…" : "📤 Upload image/video"}
-                      <input
-                        type="file"
-                        accept="image/*,video/*"
-                        style={{ display: "none" }}
-                        disabled={uploading === index}
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (f) uploadMedia(index, f);
-                          e.target.value = "";
-                        }}
-                      />
-                    </label>
+                      📤 Upload image/video
+                    </Button>
+                    <input
+                      id={`media-upload-${index}`}
+                      type="file"
+                      accept="image/*,video/*"
+                      style={{ display: "none" }}
+                      disabled={uploading === index}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) uploadMedia(index, f);
+                        e.target.value = "";
+                      }}
+                    />
                     {creative.imageUrl && (
                       <Text as="span" variant="bodySm" tone="success">
                         ✓ Media set
