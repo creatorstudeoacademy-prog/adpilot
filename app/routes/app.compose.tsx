@@ -228,6 +228,47 @@ export default function ComposePage() {
   const [imgBusy, setImgBusy] = useState(false);
   const [imgError, setImgError] = useState("");
 
+  // Store catalog picker state
+  const [catalog, setCatalog] = useState<{
+    products: Array<{ id: string; title: string; description: string; image: string; price: string }>;
+    collections: Array<{ id: string; title: string; description: string; image: string }>;
+  } | null>(null);
+  const [catalogSource, setCatalogSource] = useState("manual"); // manual | product | collection
+  const [catalogChoice, setCatalogChoice] = useState("");
+
+  const loadCatalog = async () => {
+    if (catalog) return;
+    try {
+      const res = await fetch("/api/shop/catalog");
+      const data = (await res.json()) as {
+        products?: Array<{ id: string; title: string; description: string; image: string; price: string }>;
+        collections?: Array<{ id: string; title: string; description: string; image: string }>;
+      };
+      setCatalog({ products: data.products ?? [], collections: data.collections ?? [] });
+    } catch {
+      // picker stays empty; merchant can still type manually
+    }
+  };
+
+  const applyCatalogChoice = (source: string, id: string) => {
+    setCatalogSource(source);
+    setCatalogChoice(id);
+    if (!catalog || !id) return;
+    if (source === "product") {
+      const p = catalog.products.find((x) => x.id === id);
+      if (!p) return;
+      const topic = `${p.title}${p.price ? ` — ${p.price}` : ""}${p.description ? `. ${p.description}` : ""}`;
+      setAiTopic(topic);
+      if (p.image) setMediaUrl(p.image);
+    } else if (source === "collection") {
+      const c = catalog.collections.find((x) => x.id === id);
+      if (!c) return;
+      const topic = `${c.title} collection${c.description ? `. ${c.description}` : ""}`;
+      setAiTopic(topic);
+      if (c.image) setMediaUrl(c.image);
+    }
+  };
+
   const handleImageGenerate = async () => {
     if (!imgPrompt.trim() || imgBusy) return;
     setImgBusy(true);
@@ -344,6 +385,50 @@ export default function ComposePage() {
             <Layout>
               <Layout.Section>
                 <BlockStack gap="500">
+                  <Card>
+                    <BlockStack gap="300">
+                      <Text as="h2" variant="headingMd">
+                        📦 Post about
+                      </Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Pick a product or collection from your store — the
+                        caption topic and media fill in automatically. Or write
+                        manually.
+                      </Text>
+                      <Select
+                        label="Source"
+                        options={[
+                          { label: "Write manually", value: "manual" },
+                          { label: "Store product", value: "product" },
+                          { label: "Store collection", value: "collection" },
+                        ]}
+                        value={catalogSource}
+                        onChange={(v) => {
+                          loadCatalog();
+                          applyCatalogChoice(v, "");
+                        }}
+                      />
+                      {catalogSource !== "manual" && (
+                        <Select
+                          label={catalogSource === "product" ? "Product" : "Collection"}
+                          options={[
+                            { label: "Choose…", value: "" },
+                            ...(catalogSource === "product"
+                              ? (catalog?.products ?? []).map((p) => ({
+                                  label: `${p.title}${p.price ? ` (${p.price})` : ""}`,
+                                  value: p.id,
+                                }))
+                              : (catalog?.collections ?? []).map((c) => ({
+                                  label: c.title,
+                                  value: c.id,
+                                }))),
+                          ]}
+                          value={catalogChoice}
+                          onChange={(v) => applyCatalogChoice(catalogSource, v)}
+                        />
+                      )}
+                    </BlockStack>
+                  </Card>
                   <Card>
                     <BlockStack gap="300">
                       <Text as="h2" variant="headingMd">
