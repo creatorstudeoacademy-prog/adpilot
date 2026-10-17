@@ -45,8 +45,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     campaigns.map((c) => c.metaCampaignId).filter(Boolean),
   );
   let metaFetchError: string | null = null;
+  let metaFetchAttempted = false;
   await Promise.all(
     adAccounts.map(async (acct) => {
+      metaFetchAttempted = true;
       try {
         const list = await getCampaigns(acct.adAccountId, acct.accessToken);
         for (const m of list) {
@@ -88,6 +90,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     })),
     metaCampaigns,
     metaFetchError,
+    metaFetchAttempted,
+    adAccountCount: adAccounts.length,
   });
 };
 
@@ -135,8 +139,14 @@ function statusBadge(status: string) {
 }
 
 export default function Campaigns() {
-  const { published, campaigns, metaCampaigns, metaFetchError } =
-    useLoaderData<typeof loader>();
+  const {
+    published,
+    campaigns,
+    metaCampaigns,
+    metaFetchError,
+    metaFetchAttempted,
+    adAccountCount,
+  } = useLoaderData<typeof loader>();
   const [params] = useSearchParams();
   const submit = useSubmit();
   const nav = useNavigation();
@@ -215,20 +225,30 @@ export default function Campaigns() {
             Could not load live Meta campaigns: {metaFetchError}
           </Banner>
         )}
-        {metaRows.length > 0 && (
+        {adAccountCount > 0 && (
           <Card>
             <BlockStack gap="300">
               <Text as="h2" variant="headingMd">
                 From Meta Ads Manager
               </Text>
-              <Text as="p" variant="bodySm" tone="subdued">
-                Campaigns created directly in Meta — shown for reference.
-              </Text>
-              <DataTable
-                columnContentTypes={["text", "text", "text", "text", "text", "text"]}
-                headings={["Name", "Objective", "Status", "Budget", "Ad account", "Source"]}
-                rows={metaRows}
-              />
+              {metaRows.length > 0 ? (
+                <>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Campaigns created directly in Meta — shown for reference.
+                  </Text>
+                  <DataTable
+                    columnContentTypes={["text", "text", "text", "text", "text", "text"]}
+                    headings={["Name", "Objective", "Status", "Budget", "Ad account", "Source"]}
+                    rows={metaRows}
+                  />
+                </>
+              ) : !metaFetchError ? (
+                <Text as="p" variant="bodySm" tone="subdued">
+                  {metaFetchAttempted
+                    ? "No campaigns found in your Meta ad accounts."
+                    : "Loading Meta campaigns…"}
+                </Text>
+              ) : null}
             </BlockStack>
           </Card>
         )}
