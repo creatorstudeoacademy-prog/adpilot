@@ -80,6 +80,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       currency: a.currency,
     })),
     walletBalance: wallet.balance,
+    isFreeShop: isFreeShop(shop),
     pages,
     audiences,
   });
@@ -294,7 +295,7 @@ const EMPTY_CREATIVE: CreativeForm = {
 };
 
 export default function CreateCampaign() {
-  const { adAccounts, walletBalance, pages, audiences } = useLoaderData<typeof loader>();
+  const { adAccounts, walletBalance, isFreeShop, pages, audiences } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const submit = useSubmit();
   const nav = useNavigation();
@@ -376,7 +377,7 @@ export default function CreateCampaign() {
 
   const budgetNum = parseFloat(dailyBudget) || 0;
   const fee = calculatePublishFee(objective, adSetCount, creatives.length);
-  const insufficient = fee.total > walletBalance;
+  const insufficient = !isFreeShop && fee.total > walletBalance;
 
   const updateCreative = (index: number, patch: Partial<CreativeForm>) => {
     setCreatives((prev) => prev.map((c, i) => (i === index ? { ...c, ...patch } : c)));
@@ -881,7 +882,9 @@ export default function CreateCampaign() {
                 <Button variant="primary" loading={busy} onClick={publish}>
                   {insufficient
                     ? "Top up & publish"
-                    : `Publish campaign ($${fee.total.toFixed(2)})`}
+                    : isFreeShop
+                      ? "Publish campaign (Free)"
+                      : `Publish campaign ($${fee.total.toFixed(2)})`}
                 </Button>
               </InlineStack>
             </BlockStack>
