@@ -17,6 +17,7 @@ import {
 import { authenticate } from "../shopify.server";
 import { getWallet } from "../lib/wallet.server";
 import { TOPUP_PACKS, POST_PUBLISH_FEE, OBJECTIVE_FEES } from "../lib/pricing";
+import { NavButton } from "../components/NavButton";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -86,9 +87,9 @@ export default function BillingPage() {
                           <Text as="p" variant="bodySm" tone="subdued">
                             {pack.sublabel}
                           </Text>
-                          <Button url="/app/wallet" variant="primary">
+                          <NavButton url="/app/wallet" variant="primary">
                             Top up
-                          </Button>
+                          </NavButton>
                         </BlockStack>
                       </Card>
                     </Grid.Cell>

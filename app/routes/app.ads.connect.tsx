@@ -16,6 +16,7 @@ import { useState } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { listAdAccounts } from "../lib/meta-ads.server";
+import { NavButton } from "../components/NavButton";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -101,9 +102,9 @@ export default function ConnectAdAccount() {
               Meta connection to find your ad accounts.
             </Text>
             <InlineStack>
-              <Button variant="primary" url="/app/accounts">
+              <NavButton variant="primary" url="/app/accounts">
                 Connect Facebook
-              </Button>
+              </NavButton>
             </InlineStack>
           </BlockStack>
         </Card>

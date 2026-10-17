@@ -24,6 +24,7 @@ import {
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { createMetaConnectParams } from "../lib/meta-oauth.server";
+import { NavButton } from "../components/NavButton";
 
 const GRAPH_VERSION = "v21.0";
 
@@ -260,7 +261,7 @@ export default function AccountsPage() {
                   Connect Facebook
                 </Button>
               ))}
-            <Button url="/app/ads/connect">Connect Ad Account</Button>
+            <NavButton url="/app/ads/connect">Connect Ad Account</NavButton>
           </InlineStack>
           <div style={{ marginTop: 12 }}>
             <Text as="p" variant="bodySm" tone="subdued">

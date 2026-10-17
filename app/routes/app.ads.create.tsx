@@ -34,6 +34,7 @@ import {
   OBJECTIVE_FEE_LABELS,
   calculatePublishFee,
 } from "../lib/pricing";
+import { NavButton } from "../components/NavButton";
 
 const CTA_OPTIONS = [
   { label: "Shop Now", value: "SHOP_NOW" },
@@ -525,9 +526,9 @@ export default function CreateCampaign() {
                 {targetingMode === "saved" && audiences.length === 0 && (
                   <Banner tone="info">
                     No saved audiences yet.{" "}
-                    <Button plain url="/app/ads/audiences">
+                    <NavButton plain url="/app/ads/audiences">
                       Create one in Audience Manager
-                    </Button>
+                    </NavButton>
                   </Banner>
                 )}
                 <Grid>

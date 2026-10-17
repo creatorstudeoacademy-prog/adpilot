@@ -15,6 +15,7 @@ import {
 
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { NavButton } from "../components/NavButton";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -74,9 +75,9 @@ export default function AdsDashboard() {
                 handles the rest.
               </Text>
               <InlineStack>
-                <Button variant="primary" url="/app/ads/connect">
+                <NavButton variant="primary" url="/app/ads/connect">
                   Connect ad account
-                </Button>
+                </NavButton>
               </InlineStack>
             </BlockStack>
           </Card>
@@ -131,7 +132,7 @@ export default function AdsDashboard() {
                   <Text as="h2" variant="headingMd">
                     Connected ad accounts
                   </Text>
-                  <Button url="/app/ads/connect">Add account</Button>
+                  <NavButton url="/app/ads/connect">Add account</NavButton>
                 </InlineStack>
                 <BlockStack gap="200">
                   {adAccounts.map((a) => (
@@ -144,10 +145,10 @@ export default function AdsDashboard() {
                   ))}
                 </BlockStack>
                 <InlineStack gap="300">
-                  <Button variant="primary" url="/app/ads/create">
+                  <NavButton variant="primary" url="/app/ads/create">
                     Create campaign
-                  </Button>
-                  <Button url="/app/ads/campaigns">View campaigns</Button>
+                  </NavButton>
+                  <NavButton url="/app/ads/campaigns">View campaigns</NavButton>
                 </InlineStack>
               </BlockStack>
             </Card>

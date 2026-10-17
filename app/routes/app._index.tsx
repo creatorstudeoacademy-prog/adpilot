@@ -14,6 +14,7 @@ import {
 
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { NavButton } from "../components/NavButton";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -74,9 +75,9 @@ export default function Dashboard() {
                 ${walletBalance.toFixed(2)}
               </Text>
             </BlockStack>
-            <Button url="/app/wallet" variant="primary">
+            <NavButton url="/app/wallet" variant="primary">
               Top up wallet
-            </Button>
+            </NavButton>
           </InlineStack>
         </Card>
 
@@ -92,9 +93,9 @@ export default function Dashboard() {
                 to Facebook and Instagram.
               </Text>
               <InlineStack>
-                <Button variant="primary" url="/app/accounts">
+                <NavButton variant="primary" url="/app/accounts">
                   Connect your Facebook Page
-                </Button>
+                </NavButton>
               </InlineStack>
             </BlockStack>
           </Card>
@@ -162,8 +163,8 @@ export default function Dashboard() {
                 ))}
               </BlockStack>
               <InlineStack gap="300">
-                <Button url="/app/compose">Compose a post</Button>
-                <Button url="/app/scheduled">View scheduled</Button>
+                <NavButton url="/app/compose">Compose a post</NavButton>
+                <NavButton url="/app/scheduled">View scheduled</NavButton>
               </InlineStack>
             </BlockStack>
           </Card>
@@ -175,9 +176,9 @@ export default function Dashboard() {
               <Text as="h2" variant="headingMd">
                 Ads Manager
               </Text>
-              <Button url="/app/ads" variant="primary" size="slim">
+              <NavButton url="/app/ads" variant="primary" size="slim">
                 Open Ads Manager
-              </Button>
+              </NavButton>
             </InlineStack>
             <InlineStack gap="300">
               <Text as="p" variant="bodyMd">
@@ -188,8 +189,8 @@ export default function Dashboard() {
               </Text>
             </InlineStack>
             <InlineStack gap="300">
-              <Button url="/app/ads/create">Create campaign</Button>
-              <Button url="/app/wallet">Top up wallet</Button>
+              <NavButton url="/app/ads/create">Create campaign</NavButton>
+              <NavButton url="/app/wallet">Top up wallet</NavButton>
             </InlineStack>
           </BlockStack>
         </Card>

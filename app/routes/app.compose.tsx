@@ -31,6 +31,7 @@ import { publishToPlatforms } from "../lib/meta.server";
 import { deduct, getWallet, isFreeShop, refund } from "../lib/wallet.server";
 import { logActivity } from "../lib/activity.server";
 import { POST_PUBLISH_FEE } from "../lib/pricing";
+import { NavButton } from "../components/NavButton";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -382,9 +383,9 @@ export default function ComposePage() {
               <Text as="p" variant="bodyMd">
                 Connect a Facebook Page first to start posting.
               </Text>
-              <Button url="/app/accounts" variant="primary">
+              <NavButton url="/app/accounts" variant="primary">
                 Go to Accounts
-              </Button>
+              </NavButton>
             </BlockStack>
           </Card>
         ) : (
