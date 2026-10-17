@@ -109,13 +109,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     where: { id: campaignId, shop },
     include: { adAccount: true },
   });
-  if (!campaign?.metaCampaignId) {
+  if (!campaign) {
+    return json({ ok: false, error: "Campaign not found." });
+  }
+  // Toggle needs Meta ID; delete works for drafts too.
+  if (intent !== "delete" && !campaign.metaCampaignId) {
     return json({ ok: false, error: "Campaign not published to Meta yet." });
   }
 
   try {
     if (intent === "delete") {
-      await deleteCampaign(campaign.metaCampaignId, campaign.adAccount.accessToken);
+      // Draft/failed campaigns have no Meta ID — just delete from DB.
+      if (campaign.metaCampaignId) {
+        await deleteCampaign(campaign.metaCampaignId, campaign.adAccount.accessToken);
+      }
       await prisma.campaign.delete({ where: { id: campaign.id } });
       return json({ ok: true, deleted: true });
     }
@@ -225,6 +232,21 @@ export default function Campaigns() {
           disabled={busy}
           onClick={() => {
             if (window.confirm(`Delete "${c.name}" permanently from Meta?`)) {
+              remove(c.id);
+            }
+          }}
+        >
+          Delete
+        </Button>
+      )}
+      {(c.status === "draft" || c.status === "failed") && (
+        <Button
+          size="slim"
+          tone="critical"
+          variant="plain"
+          disabled={busy}
+          onClick={() => {
+            if (window.confirm(`Delete draft "${c.name}"?`)) {
               remove(c.id);
             }
           }}
