@@ -34,9 +34,17 @@ async function marketingFetch(
   const res = await fetch(url, { method, body });
   const data = (await res.json()) as GraphError & Record<string, any>;
   if (!res.ok || data.error) {
-    throw new Error(
-      friendlyMetaError(data.error?.message ?? `Meta API error (HTTP ${res.status})`),
-    );
+    const err = data.error ?? {};
+    const details = [
+      err.message ?? `Meta API error (HTTP ${res.status})`,
+      err.code ? `(code ${err.code})` : "",
+      err.error_subcode ? `(subcode ${err.error_subcode})` : "",
+      err.error_data ? JSON.stringify(err.error_data).slice(0, 300) : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    console.error(`[meta-ads] API error on ${method} ${path}:`, details);
+    throw new Error(friendlyMetaError(details));
   }
   return data;
 }
