@@ -44,6 +44,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const localMetaIds = new Set(
     campaigns.map((c) => c.metaCampaignId).filter(Boolean),
   );
+  let metaFetchError: string | null = null;
   await Promise.all(
     adAccounts.map(async (acct) => {
       try {
@@ -61,8 +62,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             metaCampaignId: m.id,
           });
         }
-      } catch {
-        // Best-effort: a failing ad account shouldn't break the page.
+      } catch (e) {
+        // Surface the first error so it's diagnosable instead of silent.
+        if (!metaFetchError) {
+          metaFetchError =
+            e instanceof Error ? e.message : "Could not load Meta campaigns.";
+        }
       }
     }),
   );
@@ -82,6 +87,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       source: "adpilot" as const,
     })),
     metaCampaigns,
+    metaFetchError,
   });
 };
 
@@ -129,7 +135,8 @@ function statusBadge(status: string) {
 }
 
 export default function Campaigns() {
-  const { published, campaigns, metaCampaigns } = useLoaderData<typeof loader>();
+  const { published, campaigns, metaCampaigns, metaFetchError } =
+    useLoaderData<typeof loader>();
   const [params] = useSearchParams();
   const submit = useSubmit();
   const nav = useNavigation();
@@ -203,6 +210,11 @@ export default function Campaigns() {
             />
           )}
         </Card>
+        {metaFetchError && (
+          <Banner tone="warning">
+            Could not load live Meta campaigns: {metaFetchError}
+          </Banner>
+        )}
         {metaRows.length > 0 && (
           <Card>
             <BlockStack gap="300">
