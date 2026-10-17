@@ -3,6 +3,7 @@ import type {
   LoaderFunctionArgs,
 } from "@remix-run/node";
 import { json, redirect } from "@remix-run/node";
+import { useState } from "react";
 import {
   useActionData,
   useLoaderData,
@@ -129,6 +130,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       adAccountName: a.adAccountName,
       adAccountId: a.adAccountId,
       currency: a.currency,
+      pixelId: a.pixelId,
       spend30d: spendResults[i].status === "fulfilled" ? spendResults[i].value : null,
       createdAt: a.createdAt.toISOString(),
     })),
@@ -174,6 +176,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const id = String(formData.get("id") ?? "");
     await prisma.socialAccount.deleteMany({ where: { id, shop } });
     return json({ ok: true, message: "Page disconnected." });
+  }
+
+  if (intent === "save_pixel") {
+    const id = String(formData.get("id") ?? "");
+    const pixelId = String(formData.get("pixelId") ?? "").trim();
+    await prisma.adAccount.updateMany({
+      where: { id, shop },
+      data: { pixelId: pixelId || null },
+    });
+    return json({ ok: true, message: pixelId ? `Pixel ${pixelId} saved.` : "Pixel removed." });
   }
 
   if (intent === "disconnect_ad") {
@@ -230,6 +242,58 @@ function AccountCard({
           Disconnect
         </Button>
       </InlineStack>
+    </Card>
+  );
+}
+
+function PixelCard({
+  adAccountId,
+  currentPixelId,
+  busy,
+}: {
+  adAccountId: string;
+  currentPixelId: string | null;
+  busy: boolean;
+}) {
+  const [pixelId, setPixelId] = useState(currentPixelId ?? "");
+  const submit = useSubmit();
+  const save = () => {
+    const data = new FormData();
+    data.set("intent", "save_pixel");
+    data.set("id", adAccountId);
+    data.set("pixelId", pixelId);
+    submit(data, { method: "post" });
+  };
+  return (
+    <Card>
+      <BlockStack gap="200">
+        <Text as="h3" variant="headingSm">
+          Meta Pixel
+        </Text>
+        <Text as="p" variant="bodySm" tone="subdued">
+          Connect a Meta Pixel for conversion tracking and better ad optimization.
+          Find your Pixel ID in Meta Events Manager.
+        </Text>
+        <InlineStack gap="200" blockAlign="end">
+          <div style={{ flexGrow: 1 }}>
+            <TextField
+              label="Pixel ID"
+              value={pixelId}
+              onChange={setPixelId}
+              placeholder="e.g. 1683359659412165"
+              autoComplete="off"
+            />
+          </div>
+          <Button disabled={busy} onClick={save}>
+            Save Pixel
+          </Button>
+        </InlineStack>
+        {currentPixelId && (
+          <Text as="p" variant="bodySm" tone="success">
+            ✓ Pixel {currentPixelId} connected
+          </Text>
+        )}
+      </BlockStack>
     </Card>
   );
 }
@@ -426,19 +490,25 @@ export default function AccountsPage() {
                     </Text>
                   ) : (
                     adAccounts.map((a) => (
-                      <AccountCard
-                        key={a.id}
-                        title={a.adAccountName}
-                        subtitle={`Ad account ${a.adAccountId} · ${a.currency}`}
-                        stats={
-                          a.spend30d != null
-                            ? `$${a.spend30d.toFixed(2)} spend (30d)`
-                            : undefined
-                        }
-                        connectedAt={a.createdAt}
-                        busy={busy}
-                        onDisconnect={() => disconnectAd(a.id)}
-                      />
+                      <BlockStack key={a.id} gap="200">
+                        <AccountCard
+                          title={a.adAccountName}
+                          subtitle={`Ad account ${a.adAccountId} · ${a.currency}`}
+                          stats={
+                            a.spend30d != null
+                              ? `$${a.spend30d.toFixed(2)} spend (30d)`
+                              : undefined
+                          }
+                          connectedAt={a.createdAt}
+                          busy={busy}
+                          onDisconnect={() => disconnectAd(a.id)}
+                        />
+                        <PixelCard
+                          adAccountId={a.id}
+                          currentPixelId={a.pixelId}
+                          busy={busy}
+                        />
+                      </BlockStack>
                     ))
                   )}
                   {/* Inline ad account discovery — connect without leaving this page */}
