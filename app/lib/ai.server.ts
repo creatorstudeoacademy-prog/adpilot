@@ -402,7 +402,9 @@ Rules:
 - Description: one short supporting line, under 100 characters.
 - Match the requested tone and campaign objective.
 - Never invent fake discounts, fake reviews, or specific prices.
-Respond ONLY with JSON: {"headline": "...", "primaryText": "...", "description": "..."}`;
+
+CRITICAL OUTPUT FORMAT: You MUST respond with ONLY a valid JSON object, no other text before or after. No explanations, no markdown, no code blocks. Just the raw JSON:
+{"headline": "...", "primaryText": "...", "description": "..."}`;
 
 export interface AdCreativeInput {
   topic: string;
