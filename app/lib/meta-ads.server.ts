@@ -195,13 +195,40 @@ export async function createAdCreative(
       },
     };
   } else {
-    const img = await marketingFetch(`/act_${adAccountId}/adimages`, accessToken, {
-      url: imageUrl,
-    });
-    const imageHash = Object.values(
-      img.images as Record<string, { hash: string }>,
-    )[0]?.hash;
-    if (!imageHash) throw new Error("Meta could not fetch the creative image URL.");
+    // Download the image and upload bytes directly (more reliable than URL fetch).
+    let imageHash: string | undefined;
+    try {
+      const imgRes = await fetch(imageUrl);
+      if (!imgRes.ok) throw new Error(`Image download failed: ${imgRes.status}`);
+      const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
+      const contentType = imgRes.headers.get("content-type") || "image/jpeg";
+      const ext = contentType.includes("png") ? "png" : contentType.includes("gif") ? "gif" : "jpg";
+
+      const formData = new FormData();
+      formData.append("access_token", accessToken);
+      formData.append("filename", new Blob([imgBuffer], { type: contentType }), `creative.${ext}`);
+
+      const uploadRes = await fetch(`${GRAPH_BASE}/act_${adAccountId}/adimages`, {
+        method: "POST",
+        body: formData,
+      });
+      const uploadData = (await uploadRes.json()) as GraphError & Record<string, any>;
+      if (!uploadRes.ok || uploadData.error) {
+        throw new Error(uploadData.error?.message || `Upload failed: ${uploadRes.status}`);
+      }
+      imageHash = Object.values(
+        uploadData.images as Record<string, { hash: string }>,
+      )[0]?.hash;
+    } catch (e) {
+      // Fallback to URL method if direct upload fails.
+      const img = await marketingFetch(`/act_${adAccountId}/adimages`, accessToken, {
+        url: imageUrl,
+      });
+      imageHash = Object.values(
+        img.images as Record<string, { hash: string }>,
+      )[0]?.hash;
+    }
+    if (!imageHash) throw new Error("Meta could not process the creative image.");
 
     objectStorySpec = {
       page_id: opts.pageId,
