@@ -300,6 +300,30 @@ export default function AccountsPage() {
           </Banner>
         )}
 
+        {fbConnected && !hasUserToken && (
+          <Banner
+            tone="warning"
+            title="Reconnect Facebook to enable ad accounts"
+          >
+            <BlockStack gap="200">
+              <Text as="p">
+                Your pages were connected before ad account support was added.
+                Reconnect Facebook once to enable ad account discovery — your
+                pages will stay connected.
+              </Text>
+              <InlineStack>
+                <Button
+                  variant="primary"
+                  url={metaConnectUrl}
+                  target="_blank"
+                >
+                  Reconnect Facebook
+                </Button>
+              </InlineStack>
+            </BlockStack>
+          </Banner>
+        )}
+
         <Card>
           <InlineStack gap="300">
             {metaConfigured &&
