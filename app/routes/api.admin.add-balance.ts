@@ -21,10 +21,10 @@ async function addBalance(request: Request, shop: string, amount: number) {
     return json({ ok: false, error: "Amount must be 1-1000." }, { status: 400 });
   }
 
-  const wallet = await getWallet(shop);
-  await prisma.wallet.update({
-    where: { id: wallet.id },
-    data: { balance: wallet.balance + amount },
+  const wallet = await prisma.wallet.upsert({
+    where: { shop },
+    create: { shop, balance: amount },
+    update: { balance: { increment: amount } },
   });
   await prisma.walletTransaction.create({
     data: {
@@ -35,8 +35,8 @@ async function addBalance(request: Request, shop: string, amount: number) {
     },
   });
 
-  const updated = await getWallet(shop);
-  return json({ ok: true, balance: updated.balance });
+  const updated = await prisma.wallet.findUnique({ where: { shop } });
+  return json({ ok: true, balance: updated?.balance ?? amount });
 }
 
 export const action = async ({ request }: ActionFunctionArgs) => {
