@@ -90,7 +90,6 @@ export async function createCampaign(
     name,
     objective: metaObjective,
     status: "PAUSED", // start paused; activate after ad is ready
-    special_ad_categories: "[]",
   });
   return data.id as string;
 }
