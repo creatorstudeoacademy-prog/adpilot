@@ -20,11 +20,14 @@ const EXT_BY_MIME: Record<string, string> = {
   "image/jpeg": "jpg",
   "image/png": "png",
   "image/gif": "gif",
-  // WebP NOT supported: Meta ads API rejects WebP images.
+  // WebP rejected: Meta ads API does not accept WebP.
   "video/mp4": "mp4",
   "video/quicktime": "mov",
-  "video/webm": "webm",
+  // WebM rejected: Meta prefers MP4 for video ads.
 };
+
+const SUPPORTED_MSG =
+  "Supported: JPG, PNG, GIF images; MP4, MOV videos. WebP and WebM are not supported by Meta ads.";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   await authenticate.admin(request);
@@ -47,20 +50,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ ok: false, error: "No file provided." }, { status: 400 });
   }
   const mime = file.type || "";
+  const ext = EXT_BY_MIME[mime];
+  if (!ext) {
+    const friendly =
+      mime === "image/webp"
+        ? "WebP images are not supported by Meta ads. Please upload JPG or PNG."
+        : mime === "video/webm"
+          ? "WebM videos are not supported by Meta ads. Please upload MP4."
+          : SUPPORTED_MSG;
+    return json({ ok: false, error: friendly }, { status: 400 });
+  }
   const isVideo = mime.startsWith("video/");
-  const isImage = mime.startsWith("image/");
-  if (mime === "image/webp") {
-    return json(
-      { ok: false, error: "WebP images are not supported by Meta ads. Please upload JPG or PNG." },
-      { status: 400 },
-    );
-  }
-  if (!isVideo && !isImage) {
-    return json(
-      { ok: false, error: `Only images or videos allowed (got: ${mime || "unknown type"}).` },
-      { status: 400 },
-    );
-  }
   if (file.size === 0) {
     return json({ ok: false, error: "File is empty." }, { status: 400 });
   }
@@ -68,7 +68,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ ok: false, error: "File too large (max 20MB)." }, { status: 400 });
   }
 
-  const ext = EXT_BY_MIME[mime] || (isVideo ? "mp4" : "jpg");
   const filename = `${randomUUID()}.${ext}`;
 
   try {

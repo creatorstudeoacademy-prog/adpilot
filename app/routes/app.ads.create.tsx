@@ -772,6 +772,23 @@ export default function CreateCampaign() {
                       </Text>
                     )}
                   </InlineStack>
+                  {creative.imageUrl && (
+                    <div style={{ marginTop: "8px" }}>
+                      {/\.(mp4|mov)(\?|$)/i.test(creative.imageUrl) ? (
+                        <video
+                          src={creative.imageUrl}
+                          controls
+                          style={{ maxWidth: "200px", maxHeight: "150px", borderRadius: "8px" }}
+                        />
+                      ) : (
+                        <img
+                          src={creative.imageUrl}
+                          alt="Ad creative preview"
+                          style={{ maxWidth: "200px", maxHeight: "150px", borderRadius: "8px", objectFit: "cover" }}
+                        />
+                      )}
+                    </div>
+                  )}
                   {uploadError && uploading === null && (
                     <Banner tone="critical">{uploadError}</Banner>
                   )}
