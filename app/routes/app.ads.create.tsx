@@ -78,6 +78,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       adAccountId: a.adAccountId,
       adAccountName: a.adAccountName,
       currency: a.currency,
+      pixelId: a.pixelId,
     })),
     walletBalance: wallet.balance,
     isFreeShop: isFreeShop(shop),
@@ -521,6 +522,19 @@ export default function CreateCampaign() {
                 value={adAccountDbId}
                 onChange={setAdAccountDbId}
               />
+              {(() => {
+                const selected = adAccounts.find((a) => a.id === adAccountDbId);
+                return selected?.pixelId ? (
+                  <Text as="p" variant="bodySm" tone="success">
+                    ✓ Meta Pixel {selected.pixelId} connected — conversions will be tracked
+                  </Text>
+                ) : (
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    No Meta Pixel connected.{" "}
+                    <a href="/app/accounts">Add one in Accounts</a> for conversion tracking.
+                  </Text>
+                );
+              })()}
               <TextField
                 label="Campaign name"
                 value={name}
