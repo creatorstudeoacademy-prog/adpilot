@@ -12,6 +12,8 @@ const META_SCOPES = [
   "pages_manage_posts",
   "instagram_basic",
   "instagram_content_publish",
+  "ads_read",
+  "ads_management",
 ].join(",");
 
 /**
