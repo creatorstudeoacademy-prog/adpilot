@@ -90,6 +90,7 @@ export async function createCampaign(
     name,
     objective: metaObjective,
     status: "PAUSED", // start paused; activate after ad is ready
+    special_ad_categories: "[]",
   });
   return data.id as string;
 }
@@ -107,15 +108,14 @@ export async function createAdSet(
   objective?: string,
 ): Promise<string> {
   // Optimization goal must match the campaign objective.
-  // SALES needs OFFSITE_CONVERSIONS + pixel; others use simpler goals.
   const metaObjective = OBJECTIVE_MAP[objective ?? ""] ?? "";
   let optimizationGoal = "REACH";
   let billingEvent = "IMPRESSIONS";
-  if (metaObjective === "OUTCOME_TRAFFIC" || objective === "TRAFFIC") {
+  if (metaObjective === "LINK_CLICKS" || objective === "TRAFFIC") {
     optimizationGoal = "LINK_CLICKS";
-  } else if (metaObjective === "OUTCOME_ENGAGEMENT" || objective === "ENGAGEMENT") {
+  } else if (metaObjective === "POST_ENGAGEMENT" || objective === "ENGAGEMENT") {
     optimizationGoal = "POST_ENGAGEMENT";
-  } else if (metaObjective === "OUTCOME_SALES" || objective === "SALES") {
+  } else if (metaObjective === "CONVERSIONS" || objective === "SALES") {
     // For Sales, use LINK_CLICKS as a safe default if no pixel is configured.
     // Full conversion optimization requires a pixel + promoted_object.
     optimizationGoal = "LINK_CLICKS";
