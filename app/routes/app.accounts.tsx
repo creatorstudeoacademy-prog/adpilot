@@ -189,6 +189,33 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ ok: true, message: pixelId ? `Pixel ${pixelId} saved.` : "Pixel removed." });
   }
 
+  if (intent === "fetch_pixels") {
+    const id = String(formData.get("id") ?? "");
+    const account = await prisma.adAccount.findFirst({
+      where: { id, shop },
+    });
+    if (!account) {
+      return json({ ok: false, message: "Ad account not found." });
+    }
+    const tokenRecord = await prisma.metaUserToken.findFirst({
+      where: { shop },
+      orderBy: { updatedAt: "desc" },
+    });
+    if (!tokenRecord) {
+      return json({ ok: false, message: "Connect Facebook first." });
+    }
+    try {
+      const { getAdPixels } = await import("../lib/meta-ads.server");
+      const pixels = await getAdPixels(account.accountId, tokenRecord.accessToken);
+      return json({ ok: true, pixels });
+    } catch (e) {
+      return json({
+        ok: false,
+        message: e instanceof Error ? e.message : "Failed to fetch pixels.",
+      });
+    }
+  }
+
   if (intent === "save_manual_token") {
     const token = String(formData.get("token") ?? "").trim();
     if (!token) {
@@ -282,6 +309,9 @@ function PixelCard({
   busy: boolean;
 }) {
   const [pixelId, setPixelId] = useState(currentPixelId ?? "");
+  const [pixels, setPixels] = useState<Array<{ id: string; name: string }> | null>(null);
+  const [fetching, setFetching] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const submit = useSubmit();
   const save = () => {
     const data = new FormData();
@@ -290,16 +320,84 @@ function PixelCard({
     data.set("pixelId", pixelId);
     submit(data, { method: "post" });
   };
+  const fetchPixels = async () => {
+    setFetching(true);
+    setFetchError(null);
+    try {
+      const data = new FormData();
+      data.set("intent", "fetch_pixels");
+      data.set("id", adAccountId);
+      const res = await fetch(window.location.pathname, {
+        method: "POST",
+        body: data,
+      });
+      const json = await res.json();
+      if (json.ok) {
+        setPixels(json.pixels);
+      } else {
+        setFetchError(json.message ?? "Failed to fetch pixels.");
+      }
+    } catch {
+      setFetchError("Failed to fetch pixels.");
+    } finally {
+      setFetching(false);
+    }
+  };
   return (
     <Card>
       <BlockStack gap="200">
-        <Text as="h3" variant="headingSm">
-          Meta Pixel
-        </Text>
+        <InlineStack gap="200" blockAlign="center">
+          <Text as="h3" variant="headingSm">
+            Meta Pixel
+          </Text>
+          <div style={{ marginLeft: "auto" }}>
+            <Button
+              size="slim"
+              disabled={busy || fetching}
+              loading={fetching}
+              onClick={fetchPixels}
+            >
+              Fetch from Business Manager
+            </Button>
+          </div>
+        </InlineStack>
         <Text as="p" variant="bodySm" tone="subdued">
           Connect a Meta Pixel for conversion tracking and better ad optimization.
-          Find your Pixel ID in Meta Events Manager.
+          Click "Fetch from Business Manager" to auto-load your pixels, or enter manually.
         </Text>
+        {fetchError && (
+          <Text as="p" variant="bodySm" tone="critical">
+            {fetchError}
+          </Text>
+        )}
+        {pixels && pixels.length > 0 && (
+          <BlockStack gap="100">
+            <Text as="p" variant="bodySm" fontWeight="semibold">
+              Select a pixel:
+            </Text>
+            {pixels.map((p) => (
+              <InlineStack key={p.id} gap="200" blockAlign="center">
+                <Text as="p" variant="bodySm">
+                  {p.name} ({p.id})
+                </Text>
+                <div style={{ marginLeft: "auto" }}>
+                  <Button
+                    size="slim"
+                    variant={pixelId === p.id ? "primary" : "secondary"}
+                    onClick={() => setPixelId(p.id)}
+                  >
+                    {pixelId === p.id ? "Selected" : "Select"}
+                  </Button>
+                </div>
+              </InlineStack>
+            ))}
+          </BlockStack>
+        )}
+        {pixels && pixels.length === 0 && (
+          <Text as="p" variant="bodySm" tone="subdued">
+            No pixels found in this ad account's Business Manager.
+          </Text>
+        )}
         <InlineStack gap="200" blockAlign="end">
           <div style={{ flexGrow: 1 }}>
             <TextField
