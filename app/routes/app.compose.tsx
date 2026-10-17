@@ -260,12 +260,14 @@ export default function ComposePage() {
       const topic = `${p.title}${p.price ? ` — ${p.price}` : ""}${p.description ? `. ${p.description}` : ""}`;
       setAiTopic(topic);
       if (p.image) setMediaUrl(p.image);
+      setImgPrompt(`Professional e-commerce product photography of ${p.title}, clean studio background, high quality, commercial style`);
     } else if (source === "collection") {
       const c = catalog.collections.find((x) => x.id === id);
       if (!c) return;
       const topic = `${c.title} collection${c.description ? `. ${c.description}` : ""}`;
       setAiTopic(topic);
       if (c.image) setMediaUrl(c.image);
+      setImgPrompt(`Lifestyle promotional image for ${c.title} collection, vibrant, professional e-commerce style`);
     }
   };
 
@@ -273,11 +275,16 @@ export default function ComposePage() {
     if (!imgPrompt.trim() || imgBusy) return;
     setImgBusy(true);
     setImgError("");
+    // Enrich the image prompt with the selected post goal so the visual matches.
+    const goalHint =
+      aiObjective === "sales"
+        ? ", commercial advertising style, eye-catching, product-focused"
+        : ", engaging social media style, vibrant, shareable";
     try {
       const res = await fetch("/api/ai/generate-image", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: imgPrompt.trim() }),
+        body: JSON.stringify({ prompt: imgPrompt.trim() + goalHint }),
       });
       const data = (await res.json()) as {
         ok: boolean;
