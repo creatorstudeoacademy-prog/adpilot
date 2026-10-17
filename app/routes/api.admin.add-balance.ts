@@ -26,7 +26,7 @@ async function addBalance(request: Request, shop: string, amount: number) {
     where: { id: wallet.id },
     data: { balance: wallet.balance + amount },
   });
-  await prisma.walletLedger.create({
+  await prisma.walletTransaction.create({
     data: {
       walletId: wallet.id,
       amount,
