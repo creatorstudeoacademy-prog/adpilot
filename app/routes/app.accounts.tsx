@@ -25,6 +25,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { createMetaConnectParams } from "../lib/meta-oauth.server";
 import { NavButton } from "../components/NavButton";
+import { listAdAccounts } from "../lib/meta-ads.server";
 
 const GRAPH_VERSION = "v21.0";
 
@@ -57,7 +58,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const [socialAccounts, adAccounts] = await Promise.all([
+  const [socialAccounts, adAccounts, userToken] = await Promise.all([
     prisma.socialAccount.findMany({
       where: { shop },
       orderBy: { createdAt: "desc" },
@@ -66,6 +67,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       where: { shop },
       orderBy: { createdAt: "desc" },
     }),
+    prisma.metaUserToken.findUnique({ where: { shop } }),
   ]);
 
   const metaAppId = process.env.META_APP_ID ?? "";
@@ -80,6 +82,27 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const spendResults = await Promise.allSettled(
     adAccounts.map((a) => fetchAdSpend(a.adAccountId, a.accessToken)),
   );
+
+  // Discover ad accounts available via the user token (inline connect —
+  // no navigation needed). Best-effort: never break the page.
+  let availableAdAccounts: Array<{ id: string; name: string; currency: string }> = [];
+  let adAccountsError: string | null = null;
+  if (userToken?.accessToken) {
+    try {
+      const existingIds = new Set(adAccounts.map((a) => a.adAccountId));
+      const all = await listAdAccounts(userToken.accessToken);
+      availableAdAccounts = all
+        .filter((a) => !existingIds.has(a.id.replace("act_", "")))
+        .map((a) => ({
+          id: a.id.replace("act_", ""),
+          name: a.name,
+          currency: a.currency,
+        }));
+    } catch (e) {
+      adAccountsError =
+        e instanceof Error ? e.message : "Could not load ad accounts.";
+    }
+  }
 
   return json({
     shop,
@@ -109,6 +132,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       spend30d: spendResults[i].status === "fulfilled" ? spendResults[i].value : null,
       createdAt: a.createdAt.toISOString(),
     })),
+    hasUserToken: !!userToken?.accessToken,
+    availableAdAccounts,
+    adAccountsError,
   });
 };
 
@@ -117,6 +143,26 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const shop = session.shop;
   const formData = await request.formData();
   const intent = formData.get("intent");
+
+  if (intent === "connect_ad") {
+    const adAccountId = String(formData.get("adAccountId") ?? "");
+    const adAccountName = String(formData.get("adAccountName") ?? "");
+    const currency = String(formData.get("currency") ?? "");
+    const userToken = await prisma.metaUserToken.findUnique({ where: { shop } });
+    if (!userToken?.accessToken || !adAccountId) {
+      return json({ ok: false, message: "Connect Facebook first." });
+    }
+    await prisma.adAccount.create({
+      data: {
+        shop,
+        adAccountId,
+        adAccountName,
+        accessToken: userToken.accessToken,
+        currency,
+      },
+    });
+    return json({ ok: true, message: `Ad account "${adAccountName}" connected.` });
+  }
 
   if (intent === "disconnect_all_social") {
     await prisma.socialAccount.deleteMany({ where: { shop } });
@@ -189,8 +235,17 @@ function AccountCard({
 }
 
 export default function AccountsPage() {
-  const { shop, metaConfigured, metaConnectUrl, pages, instagrams, adAccounts } =
-    useLoaderData<typeof loader>();
+  const {
+    shop,
+    metaConfigured,
+    metaConnectUrl,
+    pages,
+    instagrams,
+    adAccounts,
+    hasUserToken,
+    availableAdAccounts,
+    adAccountsError,
+  } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const submit = useSubmit();
@@ -361,6 +416,45 @@ export default function AccountsPage() {
                         onDisconnect={() => disconnectAd(a.id)}
                       />
                     ))
+                  )}
+                  {/* Inline ad account discovery — connect without leaving this page */}
+                  {hasUserToken && availableAdAccounts.length > 0 && (
+                    <Card>
+                      <BlockStack gap="300">
+                        <Text as="h2" variant="headingMd">
+                          Available ad accounts
+                        </Text>
+                        {availableAdAccounts.map((a) => (
+                          <InlineStack
+                            key={a.id}
+                            align="space-between"
+                            blockAlign="center"
+                          >
+                            <Text as="p" variant="bodyMd">
+                              {a.name} ({a.currency})
+                            </Text>
+                            <Button
+                              variant="primary"
+                              size="slim"
+                              disabled={busy}
+                              onClick={() => {
+                                const data = new FormData();
+                                data.set("intent", "connect_ad");
+                                data.set("adAccountId", a.id);
+                                data.set("adAccountName", a.name);
+                                data.set("currency", a.currency);
+                                submit(data, { method: "post" });
+                              }}
+                            >
+                              Connect
+                            </Button>
+                          </InlineStack>
+                        ))}
+                      </BlockStack>
+                    </Card>
+                  )}
+                  {hasUserToken && adAccountsError && (
+                    <Banner tone="warning">{adAccountsError}</Banner>
                   )}
                 </BlockStack>
               </BlockStack>
