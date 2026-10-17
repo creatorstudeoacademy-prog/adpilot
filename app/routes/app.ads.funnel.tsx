@@ -322,6 +322,35 @@ export default function FullFunnel() {
   const [imageUrl, setImageUrl] = useState("");
   const [destinationUrl, setDestinationUrl] = useState("");
   const [cta, setCta] = useState("SHOP_NOW");
+  const [aiFilling, setAiFilling] = useState(false);
+  const [aiFillError, setAiFillError] = useState("");
+
+  const fillWithAI = async () => {
+    if (aiFilling || !name.trim()) return;
+    setAiFilling(true);
+    setAiFillError("");
+    try {
+      const res = await fetch("/api/ai/generate-creative", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic: name.trim(),
+          objective: "SALES",
+          tone: "Professional",
+        }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "AI fill failed.");
+      if (data.headline) setHeadline(data.headline);
+      if (data.primaryText) setPrimaryText(data.primaryText);
+      if (data.description) setDescription(data.description);
+    } catch (e) {
+      setAiFillError(e instanceof Error ? e.message : "AI fill failed.");
+    } finally {
+      setAiFilling(false);
+    }
+  };
+
 
   const total = parseFloat(totalBudget) || 0;
   const split = {
@@ -532,6 +561,20 @@ export default function FullFunnel() {
                 One creative set is used across all 3 stages (Meta optimizes
                 delivery per stage).
               </Text>
+              <InlineStack gap="200" align="start">
+                <Button
+                  loading={aiFilling}
+                  disabled={!name.trim()}
+                  onClick={fillWithAI}
+                >
+                  ✨ Fill with AI ($0.20)
+                </Button>
+              </InlineStack>
+              {aiFillError && (
+                <Banner tone="critical">
+                  <p>{aiFillError}</p>
+                </Banner>
+              )}
               <TextField
                 label="Headline"
                 value={headline}
@@ -559,8 +602,45 @@ export default function FullFunnel() {
                 onChange={setImageUrl}
                 autoComplete="off"
                 placeholder="https://..."
-                helpText="Direct link to a JPG/PNG image or MP4 video."
+                helpText="Direct link to a JPG/PNG image or MP4 video — or upload below."
               />
+              <InlineStack gap="200" align="start" blockAlign="center">
+                <Button
+                  onClick={() =>
+                    document.getElementById("funnel-media-upload")?.click()
+                  }
+                >
+                  Upload image/video
+                </Button>
+                <input
+                  id="funnel-media-upload"
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,video/mp4,video/quicktime"
+                  style={{ display: "none" }}
+                  onChange={async (e) => {
+                    const f = e.target.files?.[0];
+                    if (!f) return;
+                    const formData = new FormData();
+                    formData.append("file", f);
+                    try {
+                      const res = await fetch("/api/upload-media", {
+                        method: "POST",
+                        body: formData,
+                      });
+                      const data = await res.json();
+                      if (data.ok && data.url) setImageUrl(data.url);
+                    } catch {
+                      // ignore
+                    }
+                    e.target.value = "";
+                  }}
+                />
+                {imageUrl && (
+                  <Text as="span" variant="bodySm" tone="success">
+                    ✓ Media set
+                  </Text>
+                )}
+              </InlineStack>
               <TextField
                 label="Destination URL (optional)"
                 value={destinationUrl}
