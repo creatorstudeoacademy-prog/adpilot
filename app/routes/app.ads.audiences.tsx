@@ -500,7 +500,7 @@ export default function AudienceManager() {
 
         <AutoCreateCard
           adAccounts={adAccounts}
-          busy={navigation.state !== "idle"}
+          busy={nav.state !== "idle"}
         />
         {showCreator && (
           <Card>
