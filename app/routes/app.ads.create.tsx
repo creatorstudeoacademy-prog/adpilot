@@ -636,16 +636,7 @@ export default function CreateCampaign() {
                   <Grid.Cell columnSpan={{ xs: 4, sm: 2, md: 2, lg: 4, xl: 4 }}>
                     <Select
                       label="Country"
-                      options={[
-                        { label: "United States", value: "US" },
-                        { label: "United Kingdom", value: "GB" },
-                        { label: "Canada", value: "CA" },
-                        { label: "Australia", value: "AU" },
-                        { label: "Germany", value: "DE" },
-                        { label: "France", value: "FR" },
-                        { label: "India", value: "IN" },
-                        { label: "Bangladesh", value: "BD" },
-                      ]}
+                      options={COUNTRIES}
                       value={country}
                       onChange={setCountry}
                     />

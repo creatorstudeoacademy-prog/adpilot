@@ -12,9 +12,10 @@ import prisma from "../db.server";
  * Admin-only: adds test balance to the wallet. For dev/testing only.
  */
 async function addBalance(request: Request, shop: string, amount: number) {
-  // Only allow on free/dev shops.
+  // Only allow on free/dev shops or the admin shop.
   const freeShops = (process.env.FREE_SHOP_DOMAINS ?? "").split(",").map((s) => s.trim());
-  if (!freeShops.includes(shop)) {
+  const adminShop = (process.env.ADMIN_SHOP_DOMAIN ?? "").trim();
+  if (!freeShops.includes(shop) && shop !== adminShop) {
     return json({ ok: false, error: "Not allowed." }, { status: 403 });
   }
   if (!amount || amount <= 0 || amount > 1000) {
