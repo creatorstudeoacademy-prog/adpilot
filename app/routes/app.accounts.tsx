@@ -117,6 +117,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const intent = formData.get("intent");
 
+  if (intent === "disconnect_all_social") {
+    await prisma.socialAccount.deleteMany({ where: { shop } });
+    await prisma.metaUserToken.deleteMany({ where: { shop } });
+    return json({ ok: true, message: "Facebook disconnected." });
+  }
+
   if (intent === "disconnect_social") {
     const id = String(formData.get("id") ?? "");
     await prisma.socialAccount.deleteMany({ where: { id, shop } });
@@ -203,7 +209,20 @@ export default function AccountsPage() {
     submit(data, { method: "post" });
   };
 
+  const disconnectAllSocial = () => {
+    if (
+      window.confirm(
+        "Disconnect all Facebook pages? You can reconnect anytime.",
+      )
+    ) {
+      const data = new FormData();
+      data.set("intent", "disconnect_all_social");
+      submit(data, { method: "post" });
+    }
+  };
+
   const totalConnected = pages.length + instagrams.length + adAccounts.length;
+  const fbConnected = pages.length > 0;
 
   return (
     <Page
@@ -227,15 +246,20 @@ export default function AccountsPage() {
 
         <Card>
           <InlineStack gap="300">
-            {metaConfigured && (
-              <Button
-                variant="primary"
-                url={metaConnectUrl}
-                target="_blank"
-              >
-                Connect Facebook
-              </Button>
-            )}
+            {metaConfigured &&
+              (fbConnected ? (
+                <Button tone="critical" onClick={disconnectAllSocial} disabled={busy}>
+                  Disconnect Facebook
+                </Button>
+              ) : (
+                <Button
+                  variant="primary"
+                  url={metaConnectUrl}
+                  target="_blank"
+                >
+                  Connect Facebook
+                </Button>
+              ))}
             <Button url="/app/ads/connect">Connect Ad Account</Button>
           </InlineStack>
           <div style={{ marginTop: 12 }}>
