@@ -109,6 +109,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
   const pagesData = (await pagesRes.json()) as PagesResponse;
 
+  // 3b. Store the long-lived user token — required for Marketing API
+  // (ad accounts). Page tokens cannot call /me/adaccounts.
+  await prisma.metaUserToken.upsert({
+    where: { shop },
+    update: { accessToken: userToken },
+    create: { shop, accessToken: userToken },
+  });
+
   // 4. Store each Page.
   for (const page of pagesData.data ?? []) {
     // Page tokens don't expire for most cases; store without expiry.

@@ -52,6 +52,16 @@ model SocialAccount {
   @@unique([shop, pageId])
 }
 
+// Meta OAuth user token (long-lived, ~60 days). Needed for Marketing API
+// calls like /me/adaccounts — page tokens cannot access those endpoints.
+model MetaUserToken {
+  id          String   @id @default(cuid())
+  shop        String   @unique
+  accessToken String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 /// A social media post — drafted, scheduled, published, or failed.
 model ScheduledPost {
   id              String    @id @default(cuid())

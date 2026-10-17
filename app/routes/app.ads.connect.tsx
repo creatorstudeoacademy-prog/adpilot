@@ -21,13 +21,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  // Find a Meta token from any connected social account (same Meta app).
-  const social = await prisma.socialAccount.findFirst({
-    where: { shop },
-    orderBy: { createdAt: "desc" },
-  });
+  // Ad account listing needs the Meta USER token (page tokens cannot call
+  // /me/adaccounts). It is stored at connect time in MetaUserToken.
+  const userToken = await prisma.metaUserToken.findUnique({ where: { shop } });
 
-  if (!social?.accessToken) {
+  if (!userToken?.accessToken) {
     return json({
       needsMeta: true,
       accounts: [] as Array<{ id: string; name: string; currency: string }>,
@@ -36,7 +34,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   try {
-    const accounts = await listAdAccounts(social.accessToken);
+    const accounts = await listAdAccounts(userToken.accessToken);
     const existing = await prisma.adAccount.findMany({ where: { shop } });
     const existingIds = new Set(existing.map((e) => e.adAccountId));
     return json({
@@ -69,11 +67,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (!adAccountId) return json({ ok: false, error: "Pick an ad account." });
 
-  const social = await prisma.socialAccount.findFirst({
-    where: { shop },
-    orderBy: { createdAt: "desc" },
-  });
-  if (!social?.accessToken)
+  const userToken = await prisma.metaUserToken.findUnique({ where: { shop } });
+  if (!userToken?.accessToken)
     return json({ ok: false, error: "Connect Facebook first." });
 
   await prisma.adAccount.create({
@@ -81,7 +76,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       shop,
       adAccountId,
       adAccountName,
-      accessToken: social.accessToken,
+      accessToken: userToken.accessToken,
       currency,
     },
   });
