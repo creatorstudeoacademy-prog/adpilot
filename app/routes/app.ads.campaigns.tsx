@@ -41,6 +41,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     status: string;
     dailyBudget: number | null;
     adAccountName: string;
+    adAccountId: string;
     metaCampaignId: string;
   }> = [];
   const localMetaIds = new Set(
@@ -63,6 +64,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             status: m.status.toLowerCase(),
             dailyBudget: m.daily_budget ? parseFloat(m.daily_budget) / 100 : null,
             adAccountName: acct.adAccountName,
+            adAccountId: acct.adAccountId,
             metaCampaignId: m.id,
           });
         }
@@ -189,6 +191,26 @@ export default function Campaigns() {
     }
   };
 
+  const analyzeMeta = async (id: string, metaCampaignId: string, adAccountId: string) => {
+    if (analyzing) return;
+    setAnalyzing(id);
+    setAnalysis(null);
+    try {
+      const res = await fetch("/api/ai/analyze-campaign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ metaCampaignId, adAccountId }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Analysis failed.");
+      setAnalysis({ id, text: data.analysis });
+    } catch (e) {
+      setAnalysis({ id, text: `Error: ${e instanceof Error ? e.message : "failed"}` });
+    } finally {
+      setAnalyzing(null);
+    }
+  };
+
   const toggle = (id: string, activate: boolean) => {
     const data = new FormData();
     data.set("intent", "toggle");
@@ -272,9 +294,18 @@ export default function Campaigns() {
     statusBadge(c.status),
     c.dailyBudget != null ? `$${c.dailyBudget.toFixed(2)}/day` : "—",
     c.adAccountName,
-    <Badge key={c.id} tone="info">
-      Meta
-    </Badge>,
+    <InlineStack key={c.id} gap="200" align="start">
+      <Badge tone="info">Meta</Badge>
+      <Button
+        size="slim"
+        variant="plain"
+        disabled={analyzing === c.id}
+        loading={analyzing === c.id}
+        onClick={() => analyzeMeta(c.id, c.metaCampaignId, c.adAccountId)}
+      >
+        📊 Analyze
+      </Button>
+    </InlineStack>,
   ]);
 
   return (
@@ -346,7 +377,7 @@ export default function Campaigns() {
                   </Text>
                   <DataTable
                     columnContentTypes={["text", "text", "text", "text", "text", "text"]}
-                    headings={["Name", "Objective", "Status", "Budget", "Ad account", "Source"]}
+                    headings={["Name", "Objective", "Status", "Budget", "Ad account", "Actions"]}
                     rows={metaRows}
                   />
                 </>

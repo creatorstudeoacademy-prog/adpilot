@@ -18,31 +18,49 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  let body: { campaignId?: unknown } = {};
+  let body: { campaignId?: unknown; metaCampaignId?: unknown; adAccountId?: unknown } = {};
   try {
     body = await request.json();
   } catch {
     return json({ ok: false, error: "Invalid JSON body." }, { status: 400 });
   }
   const campaignId = String(body.campaignId ?? "");
-  if (!campaignId) {
-    return json({ ok: false, error: "campaignId required." }, { status: 400 });
-  }
+  const metaCampaignIdDirect = String(body.metaCampaignId ?? "");
+  const adAccountIdDirect = String(body.adAccountId ?? "");
 
-  const campaign = await prisma.campaign.findFirst({
-    where: { id: campaignId, shop },
-    include: { adAccount: true },
-  });
-  if (!campaign?.metaCampaignId) {
-    return json({ ok: false, error: "Campaign not published to Meta yet." }, { status: 400 });
+  let metaCampaignId: string;
+  let accessToken: string;
+  let campaignName = "Meta campaign";
+
+  if (metaCampaignIdDirect && adAccountIdDirect) {
+    // Direct Meta campaign (created in Meta Ads Manager, no DB record).
+    const adAccount = await prisma.adAccount.findFirst({
+      where: { adAccountId: adAccountIdDirect, shop },
+    });
+    if (!adAccount) {
+      return json({ ok: false, error: "Ad account not connected." }, { status: 400 });
+    }
+    metaCampaignId = metaCampaignIdDirect;
+    accessToken = adAccount.accessToken;
+  } else {
+    if (!campaignId) {
+      return json({ ok: false, error: "campaignId required." }, { status: 400 });
+    }
+    const campaign = await prisma.campaign.findFirst({
+      where: { id: campaignId, shop },
+      include: { adAccount: true },
+    });
+    if (!campaign?.metaCampaignId) {
+      return json({ ok: false, error: "Campaign not published to Meta yet." }, { status: 400 });
+    }
+    metaCampaignId = campaign.metaCampaignId;
+    accessToken = campaign.adAccount.accessToken;
+    campaignName = campaign.name;
   }
 
   let insights;
   try {
-    insights = await getCampaignInsights(
-      campaign.metaCampaignId,
-      campaign.adAccount.accessToken,
-    );
+    insights = await getCampaignInsights(metaCampaignId, accessToken);
   } catch (e) {
     return json(
       { ok: false, error: e instanceof Error ? e.message : "Could not fetch insights." },
