@@ -15,17 +15,57 @@ import {
 
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import { toggleCampaign } from "../lib/meta-ads.server";
+import { getCampaigns, toggleCampaign } from "../lib/meta-ads.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const campaigns = await prisma.campaign.findMany({
-    where: { shop },
-    include: { adAccount: { select: { adAccountName: true } } },
-    orderBy: { createdAt: "desc" },
-  });
+  const [campaigns, adAccounts] = await Promise.all([
+    prisma.campaign.findMany({
+      where: { shop },
+      include: { adAccount: { select: { adAccountName: true } } },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.adAccount.findMany({ where: { shop } }),
+  ]);
+
+  // Fetch live campaigns from Meta for every connected ad account —
+  // includes campaigns created directly in Ads Manager, not just via AdPilot.
+  const metaCampaigns: Array<{
+    id: string;
+    name: string;
+    objective: string;
+    status: string;
+    dailyBudget: number | null;
+    adAccountName: string;
+    metaCampaignId: string;
+  }> = [];
+  const localMetaIds = new Set(
+    campaigns.map((c) => c.metaCampaignId).filter(Boolean),
+  );
+  await Promise.all(
+    adAccounts.map(async (acct) => {
+      try {
+        const list = await getCampaigns(acct.adAccountId, acct.accessToken);
+        for (const m of list) {
+          // Skip ones already tracked locally (avoid duplicates).
+          if (localMetaIds.has(m.id)) continue;
+          metaCampaigns.push({
+            id: `meta-${m.id}`,
+            name: m.name,
+            objective: m.objective,
+            status: m.status.toLowerCase(),
+            dailyBudget: m.daily_budget ? parseFloat(m.daily_budget) / 100 : null,
+            adAccountName: acct.adAccountName,
+            metaCampaignId: m.id,
+          });
+        }
+      } catch {
+        // Best-effort: a failing ad account shouldn't break the page.
+      }
+    }),
+  );
 
   return json({
     published: new URL(request.url).searchParams.get("published") === "1",
@@ -39,7 +79,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       createdAt: c.createdAt,
       metaCampaignId: c.metaCampaignId,
       error: c.error,
+      source: "adpilot" as const,
     })),
+    metaCampaigns,
   });
 };
 
@@ -87,7 +129,7 @@ function statusBadge(status: string) {
 }
 
 export default function Campaigns() {
-  const { published, campaigns } = useLoaderData<typeof loader>();
+  const { published, campaigns, metaCampaigns } = useLoaderData<typeof loader>();
   const [params] = useSearchParams();
   const submit = useSubmit();
   const nav = useNavigation();
@@ -121,6 +163,17 @@ export default function Campaigns() {
     ),
   ]);
 
+  const metaRows = metaCampaigns.map((c) => [
+    c.name,
+    c.objective,
+    statusBadge(c.status),
+    c.dailyBudget != null ? `$${c.dailyBudget.toFixed(2)}/day` : "—",
+    c.adAccountName,
+    <Badge key={c.id} tone="info">
+      Meta
+    </Badge>,
+  ]);
+
   return (
     <Page
       title="Campaigns"
@@ -150,6 +203,23 @@ export default function Campaigns() {
             />
           )}
         </Card>
+        {metaRows.length > 0 && (
+          <Card>
+            <BlockStack gap="300">
+              <Text as="h2" variant="headingMd">
+                From Meta Ads Manager
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                Campaigns created directly in Meta — shown for reference.
+              </Text>
+              <DataTable
+                columnContentTypes={["text", "text", "text", "text", "text", "text"]}
+                headings={["Name", "Objective", "Status", "Budget", "Ad account", "Source"]}
+                rows={metaRows}
+              />
+            </BlockStack>
+          </Card>
+        )}
       </BlockStack>
     </Page>
   );
