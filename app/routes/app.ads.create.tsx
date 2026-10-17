@@ -858,6 +858,12 @@ export default function CreateCampaign() {
               <Text as="h2" variant="headingMd">
                 Review & publish
               </Text>
+              {creatives.some((c) => /\.webp(\?|$)/i.test(c.imageUrl)) && (
+                <Banner tone="critical">
+                  One or more creatives use WebP images, which Meta ads do not support.
+                  Go back to Step 3 and re-upload as JPG/PNG (images) or MP4 (videos).
+                </Banner>
+              )}
               <BlockStack gap="200">
                 <InlineStack align="space-between">
                   <Text as="p" tone="subdued">Objective</Text>
@@ -939,7 +945,12 @@ export default function CreateCampaign() {
 
               <InlineStack align="space-between">
                 <Button onClick={() => setStep(3)}>Back</Button>
-                <Button variant="primary" loading={busy} onClick={publish}>
+                <Button
+                  variant="primary"
+                  loading={busy}
+                  disabled={creatives.some((c) => /\.webp(\?|$)/i.test(c.imageUrl))}
+                  onClick={publish}
+                >
                   {insufficient
                     ? "Top up & publish"
                     : isFreeShop
