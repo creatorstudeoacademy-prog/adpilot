@@ -144,28 +144,52 @@ export async function createAdCreative(
     pageId: string;
   },
 ): Promise<string> {
-  // Step 1: upload image to get image_hash.
-  const img = await marketingFetch(`/act_${adAccountId}/adimages`, accessToken, {
-    url: opts.imageUrl,
-  });
-  const imageHash = Object.values(
-    img.images as Record<string, { hash: string }>,
-  )[0]?.hash;
-  if (!imageHash) throw new Error("Meta could not fetch the creative image URL.");
+  // Step 1: upload media. Videos go to advideos, images to adimages.
+  const isVideo = /\.(mp4|mov|webm)(\?|$)/i.test(opts.imageUrl);
+  let objectStorySpec: Record<string, unknown>;
 
-  const objectStorySpec = {
-    page_id: opts.pageId,
-    link_data: {
-      image_hash: imageHash,
-      link: opts.destinationUrl,
-      message: opts.primaryText,
-      name: opts.headline,
-      description: opts.description ?? "",
-      call_to_action: opts.cta
-        ? { type: opts.cta, value: { link: opts.destinationUrl } }
-        : undefined,
-    },
-  };
+  if (isVideo) {
+    // Upload video file URL to get video ID.
+    const vid = await marketingFetch(`/act_${adAccountId}/advideos`, accessToken, {
+      file_url: opts.imageUrl,
+    });
+    const videoId = vid.id as string | undefined;
+    if (!videoId) throw new Error("Meta could not fetch the creative video URL.");
+    objectStorySpec = {
+      page_id: opts.pageId,
+      video_data: {
+        video_id: videoId,
+        title: opts.headline,
+        message: opts.primaryText,
+        link_description: opts.description ?? "",
+        call_to_action: opts.cta
+          ? { type: opts.cta, value: { link: opts.destinationUrl } }
+          : undefined,
+      },
+    };
+  } else {
+    const img = await marketingFetch(`/act_${adAccountId}/adimages`, accessToken, {
+      url: opts.imageUrl,
+    });
+    const imageHash = Object.values(
+      img.images as Record<string, { hash: string }>,
+    )[0]?.hash;
+    if (!imageHash) throw new Error("Meta could not fetch the creative image URL.");
+
+    objectStorySpec = {
+      page_id: opts.pageId,
+      link_data: {
+        image_hash: imageHash,
+        link: opts.destinationUrl,
+        message: opts.primaryText,
+        name: opts.headline,
+        description: opts.description ?? "",
+        call_to_action: opts.cta
+          ? { type: opts.cta, value: { link: opts.destinationUrl } }
+          : undefined,
+      },
+    };
+  }
 
   const data = await marketingFetch(`/act_${adAccountId}/adcreatives`, accessToken, {
     name,
