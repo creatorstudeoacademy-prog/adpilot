@@ -160,14 +160,25 @@ export async function createAdCreative(
     pageId: string;
   },
 ): Promise<string> {
+  // Resolve redirects — Meta's adimages API doesn't follow them.
+  let imageUrl = opts.imageUrl;
+  try {
+    const headRes = await fetch(imageUrl, { method: "HEAD", redirect: "follow" });
+    if (headRes.url && headRes.url !== imageUrl) {
+      imageUrl = headRes.url;
+    }
+  } catch {
+    // If HEAD fails, try with the original URL.
+  }
+
   // Step 1: upload media. Videos go to advideos, images to adimages.
-  const isVideo = /\.(mp4|mov|webm)(\?|$)/i.test(opts.imageUrl);
+  const isVideo = /\.(mp4|mov|webm)(\?|$)/i.test(imageUrl);
   let objectStorySpec: Record<string, unknown>;
 
   if (isVideo) {
     // Upload video file URL to get video ID.
     const vid = await marketingFetch(`/act_${adAccountId}/advideos`, accessToken, {
-      file_url: opts.imageUrl,
+      file_url: imageUrl,
     });
     const videoId = vid.id as string | undefined;
     if (!videoId) throw new Error("Meta could not fetch the creative video URL.");
@@ -185,7 +196,7 @@ export async function createAdCreative(
     };
   } else {
     const img = await marketingFetch(`/act_${adAccountId}/adimages`, accessToken, {
-      url: opts.imageUrl,
+      url: imageUrl,
     });
     const imageHash = Object.values(
       img.images as Record<string, { hash: string }>,
