@@ -86,11 +86,28 @@ export async function createCampaign(
   objective: string,
 ): Promise<string> {
   const metaObjective = OBJECTIVE_MAP[objective] ?? OBJECTIVE_MAP.TRAFFIC;
-  const data = await marketingFetch(`/act_${adAccountId}/campaigns`, accessToken, {
+  // Send as JSON with proper array type for special_ad_categories
+  const url = `${GRAPH_BASE}/act_${adAccountId}/campaigns`;
+  const body = {
+    access_token: accessToken,
     name,
     objective: metaObjective,
-    status: "PAUSED", // start paused; activate after ad is ready
+    status: "PAUSED",
+    special_ad_categories: [] as string[],
+  };
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
   });
+  const data = (await res.json()) as any;
+  if (!res.ok || data.error) {
+    const err = data.error ?? {};
+    throw new Error(
+      `Meta API error: ${err.message ?? `HTTP ${res.status}`} (code ${err.code ?? "?"})` +
+        (err.error_subcode ? ` (subcode ${err.error_subcode})` : ""),
+    );
+  }
   return data.id as string;
 }
 
