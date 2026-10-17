@@ -2,10 +2,10 @@
 
 /** Objective mapping: our names -> Meta objectives. */
 export const OBJECTIVE_MAP: Record<string, string> = {
-  AWARENESS: "BRAND_AWARENESS",
-  TRAFFIC: "LINK_CLICKS",
-  ENGAGEMENT: "POST_ENGAGEMENT",
-  SALES: "CONVERSIONS",
+  AWARENESS: "OUTCOME_AWARENESS",
+  TRAFFIC: "OUTCOME_TRAFFIC",
+  ENGAGEMENT: "OUTCOME_ENGAGEMENT",
+  SALES: "OUTCOME_SALES",
 };
 
 export const OBJECTIVES = [
