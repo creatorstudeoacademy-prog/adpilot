@@ -36,6 +36,7 @@ import {
 import { deduct, getWallet, isFreeShop, refund } from "../lib/wallet.server";
 import { logActivity } from "../lib/activity.server";
 import {
+  AI_AUDIENCE_FEE,
   LOOKALIKE_AUDIENCE_FEE,
   STANDALONE_AUDIENCE_FEE,
 } from "../lib/pricing";
@@ -159,6 +160,141 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
   const form = await request.formData();
+
+  const intent = String(form.get("intent") ?? "create");
+
+  // ✨ AI Auto-create audience: analyzes page + objective, generates targeting via AI
+  if (intent === "auto_create") {
+    const adAccountDbId = String(form.get("adAccountDbId") ?? "");
+    const objective = String(form.get("objective") ?? "TRAFFIC");
+    const name = String(form.get("name") ?? "").trim() || `AI Audience - ${objective}`;
+
+    const adAccount = await prisma.adAccount.findFirst({
+      where: { id: adAccountDbId, shop },
+    });
+    if (!adAccount) return json({ ok: false, error: "Select an ad account." });
+
+    // Get page info for AI context
+    const page = await prisma.socialAccount.findFirst({
+      where: { shop, platform: "facebook" },
+    });
+
+    // Get AI-generated targeting
+    let targeting: {
+      country: string;
+      ageMin: number;
+      ageMax: number;
+      interestKeywords: string[];
+      description: string;
+    };
+    try {
+      const { generateWithProvider, resolveProvidersAsync } = await import("../lib/ai.server");
+      const providers = await resolveProvidersAsync();
+      if (providers.length === 0) {
+        throw new Error("No AI provider configured. Add an AI in the AI Control Panel.");
+      }
+      const pageContext = page
+        ? `Facebook Page: ${page.pageName} (ID: ${page.pageId})`
+        : "No Facebook Page connected";
+      const prompt = `You are a Meta ads targeting expert. Generate optimal audience targeting for a Facebook/Instagram ad campaign.
+
+Context:
+- ${pageContext}
+- Campaign Objective: ${objective}
+- Business: E-commerce store selling trending products
+
+Generate targeting as JSON with these exact fields:
+{
+  "country": "US",
+  "ageMin": 18,
+  "ageMax": 65,
+  "interestKeywords": ["keyword1", "keyword2", "keyword3", "keyword4", "keyword5"],
+  "description": "Brief explanation of why this targeting works for the objective"
+}
+
+Rules:
+- For TRAFFIC: broad interests, ages 18-65, focus on discovery
+- For ENGAGEMENT: interests aligned with viral/shareable content, ages 18-44
+- For SALES: purchase-intent interests, ages 25-54, focus on buyers
+- For AWARENESS: very broad, ages 18-65, mass appeal interests
+- Include 5 specific, relevant interest keywords (not generic like "shopping")
+- Country: US (primary market)
+
+Return ONLY the JSON, no other text.`;
+
+      const aiResult = await generateWithProvider(providers[0], prompt, {
+        maxTokens: 500,
+        temperature: 0.7,
+      });
+      const jsonMatch = aiResult.text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error("AI did not return valid targeting.");
+      targeting = JSON.parse(jsonMatch[0]);
+    } catch (e) {
+      return json({
+        ok: false,
+        error: e instanceof Error ? e.message : "AI targeting generation failed.",
+      });
+    }
+
+    // Create the audience in DB
+    const fee = AI_AUDIENCE_FEE;
+    const wallet = await getWallet(shop);
+    if (!isFreeShop(shop) && wallet.balance < fee) {
+      return redirect("/app/wallet?need=" + fee.toFixed(2));
+    }
+
+    const audience = await prisma.audience.create({
+      data: {
+        shop,
+        adAccountId: adAccount.id,
+        name,
+        type: "interest",
+        status: "active",
+        publishFee: fee,
+        config: JSON.stringify({
+          ...targeting,
+          autoCreated: true,
+          objective,
+        }),
+      },
+    });
+
+    await deduct(shop, fee, `AI auto-audience: ${name}`, audience.id);
+
+    try {
+      const result = await createInterestAudience(
+        adAccount.adAccountId,
+        adAccount.accessToken,
+        {
+          name,
+          country: targeting.country,
+          ageMin: targeting.ageMin,
+          ageMax: targeting.ageMax,
+          interestKeywords: targeting.interestKeywords,
+        },
+      );
+      await prisma.audience.update({
+        where: { id: audience.id },
+        data: { metaAudienceId: result.id, subtype: "SAVED" },
+      });
+      await logActivity(shop, `AI created audience: ${name}`);
+      return json({
+        ok: true,
+        message: `AI created audience "${name}" with ${targeting.interestKeywords.length} interests. ${targeting.description}`,
+        audienceId: audience.id,
+      });
+    } catch (e) {
+      await prisma.audience.update({
+        where: { id: audience.id },
+        data: { status: "failed" },
+      });
+      await refund(shop, fee, `Refund: AI audience creation failed (${name})`, audience.id);
+      return json({
+        ok: false,
+        error: e instanceof Error ? e.message : "Meta API failed to create audience.",
+      });
+    }
+  }
 
   const adAccountDbId = String(form.get("adAccountDbId") ?? "");
   const type = String(form.get("type") ?? "");
@@ -367,7 +503,16 @@ export default function AudienceManager() {
             {actionData.error}
           </Banner>
         )}
+        {actionData?.ok && actionData.message && (
+          <Banner title="Audience created" tone="success">
+            {actionData.message}
+          </Banner>
+        )}
 
+        <AutoCreateCard
+          adAccounts={adAccounts}
+          busy={navigation.state !== "idle"}
+        />
         {showCreator && (
           <Card>
             <BlockStack gap="400">
@@ -622,5 +767,90 @@ export default function AudienceManager() {
         </Layout>
       </BlockStack>
     </Page>
+  );
+}
+
+function AutoCreateCard({
+  adAccounts,
+  busy,
+}: {
+  adAccounts: Array<{ id: string; name: string }>;
+  busy: boolean;
+}) {
+  const [objective, setObjective] = useState("TRAFFIC");
+  const [name, setName] = useState("");
+  const [adAccountDbId, setAdAccountDbId] = useState(adAccounts[0]?.id ?? "");
+  const submit = useSubmit();
+
+  const autoCreate = () => {
+    const data = new FormData();
+    data.set("intent", "auto_create");
+    data.set("adAccountDbId", adAccountDbId);
+    data.set("objective", objective);
+    data.set("name", name);
+    submit(data, { method: "post" });
+  };
+
+  return (
+    <Card>
+      <BlockStack gap="300">
+        <InlineStack gap="200" blockAlign="center">
+          <Text as="h2" variant="headingMd">
+            ✨ Auto-create Audience with AI
+          </Text>
+          <Badge tone="info">AI-Powered</Badge>
+        </InlineStack>
+        <Text as="p" variant="bodySm" tone="subdued">
+          AI analyzes your Facebook Page and campaign objective, then automatically
+          creates a high-performing interest audience. No manual targeting needed.
+        </Text>
+        <Grid columns={{ xs: 1, md: 3 }}>
+          <Grid.Cell>
+            <Select
+              label="Campaign objective"
+              options={[
+                { label: "Traffic", value: "TRAFFIC" },
+                { label: "Engagement", value: "ENGAGEMENT" },
+                { label: "Sales", value: "SALES" },
+                { label: "Awareness", value: "AWARENESS" },
+              ]}
+              value={objective}
+              onChange={setObjective}
+            />
+          </Grid.Cell>
+          <Grid.Cell>
+            <Select
+              label="Ad account"
+              options={adAccounts.map((a) => ({ label: a.name, value: a.id }))}
+              value={adAccountDbId}
+              onChange={setAdAccountDbId}
+            />
+          </Grid.Cell>
+          <Grid.Cell>
+            <TextField
+              label="Audience name (optional)"
+              value={name}
+              onChange={setName}
+              placeholder="AI will generate if empty"
+              autoComplete="off"
+            />
+          </Grid.Cell>
+        </Grid>
+        <InlineStack gap="200">
+          <Button
+            variant="primary"
+            disabled={busy || !adAccountDbId}
+            loading={busy}
+            onClick={autoCreate}
+          >
+            ✨ Generate & Create Audience ($1.20)
+          </Button>
+        </InlineStack>
+        <Text as="p" variant="bodySm" tone="subdued">
+          AI will analyze your page, pick the best interests, age range, and
+          demographics for your objective — then create the audience on Meta.
+        </Text>
+      </BlockStack>
+    </Card>
   );
 }
