@@ -87,6 +87,7 @@ model AdAccount {
   adAccountName String
   accessToken  String
   currency     String   @default("USD")
+  pixelId      String?  // Meta Pixel ID for conversion tracking
   createdAt    DateTime @default(now())
 
   campaigns Campaign[]
