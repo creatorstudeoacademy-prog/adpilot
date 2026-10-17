@@ -342,7 +342,7 @@ export default function Campaigns() {
             <BlockStack gap="300">
               <InlineStack align="space-between" blockAlign="center">
                 <Text as="h2" variant="headingMd">
-                  📊 AI Campaign Analysis
+                  📊 Campaign Analysis
                 </Text>
                 <Button variant="plain" onClick={() => setAnalysis(null)}>
                   Close
