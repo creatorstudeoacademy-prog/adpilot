@@ -571,13 +571,20 @@ export default function CreateCampaign() {
               </BlockStack>
               <InlineStack align="space-between">
                 <Button onClick={() => setStep(1)}>Back</Button>
-                <Button
-                  variant="primary"
-                  onClick={() => setStep(3)}
-                  disabled={!name.trim() || budgetNum <= 0}
-                >
-                  Continue
-                </Button>
+                <BlockStack gap="100">
+                  <Button
+                    variant="primary"
+                    onClick={() => setStep(3)}
+                    disabled={!name.trim() || budgetNum <= 0}
+                  >
+                    Continue
+                  </Button>
+                  {(!name.trim() || budgetNum <= 0) && (
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Enter a campaign name and a daily budget above to continue.
+                    </Text>
+                  )}
+                </BlockStack>
               </InlineStack>
             </BlockStack>
           </Card>
@@ -661,13 +668,21 @@ export default function CreateCampaign() {
 
             <InlineStack align="space-between">
               <Button onClick={() => setStep(2)}>Back</Button>
-              <Button
-                variant="primary"
-                onClick={() => setStep(4)}
-                disabled={!creativesValid}
-              >
-                Review
-              </Button>
+              <BlockStack gap="100">
+                <Button
+                  variant="primary"
+                  onClick={() => setStep(4)}
+                  disabled={!creativesValid}
+                >
+                  Review
+                </Button>
+                {!creativesValid && (
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Fill in headline, primary text, image URL and destination
+                    URL for every creative to continue.
+                  </Text>
+                )}
+              </BlockStack>
             </InlineStack>
           </BlockStack>
         )}
