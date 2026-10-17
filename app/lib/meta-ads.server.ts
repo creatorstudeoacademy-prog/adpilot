@@ -105,13 +105,29 @@ export async function createAdSet(
   startDate?: Date | null,
   endDate?: Date | null,
   customTargeting?: Record<string, unknown>,
+  objective?: string,
 ): Promise<string> {
+  // Optimization goal must match the campaign objective.
+  // SALES needs OFFSITE_CONVERSIONS + pixel; others use simpler goals.
+  const metaObjective = OBJECTIVE_MAP[objective ?? ""] ?? "";
+  let optimizationGoal = "REACH";
+  let billingEvent = "IMPRESSIONS";
+  if (metaObjective === "OUTCOME_TRAFFIC" || objective === "TRAFFIC") {
+    optimizationGoal = "LINK_CLICKS";
+  } else if (metaObjective === "OUTCOME_ENGAGEMENT" || objective === "ENGAGEMENT") {
+    optimizationGoal = "POST_ENGAGEMENT";
+  } else if (metaObjective === "OUTCOME_SALES" || objective === "SALES") {
+    // For Sales, use LINK_CLICKS as a safe default if no pixel is configured.
+    // Full conversion optimization requires a pixel + promoted_object.
+    optimizationGoal = "LINK_CLICKS";
+    billingEvent = "IMPRESSIONS";
+  }
   const params: Record<string, string> = {
     name,
     campaign_id: campaignId,
     daily_budget: String(Math.round(dailyBudget * 100)), // Meta expects cents
-    billing_event: "IMPRESSIONS",
-    optimization_goal: "REACH",
+    billing_event: billingEvent,
+    optimization_goal: optimizationGoal,
     bid_strategy: "LOWEST_COST_WITHOUT_CAP",
     targeting: JSON.stringify(
       customTargeting ?? {
@@ -268,6 +284,7 @@ export async function publishFullCampaign(input: {
       adSet.startDate,
       adSet.endDate,
       input.adSetTargeting,
+      input.objective,
     );
     adSetIds.push(adSetId);
 
