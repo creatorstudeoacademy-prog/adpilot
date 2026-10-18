@@ -317,6 +317,29 @@ function BusinessManagerSection({ hasUserToken }: { hasUserToken: boolean }) {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [health, setHealth] = useState<{ text: string; name?: string } | null>(null);
+  const [healthBusy, setHealthBusy] = useState(false);
+
+  const checkHealth = async (businessId: string, name: string) => {
+    if (healthBusy) return;
+    setHealthBusy(true);
+    setHealth(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/ads/bm-health", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ businessId }),
+      });
+      const data = (await res.json()) as { ok: boolean; message?: string; analysis?: string };
+      if (!data.ok) throw new Error(data.message ?? "Health check failed.");
+      setHealth({ text: data.analysis ?? "", name });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Health check failed.");
+    } finally {
+      setHealthBusy(false);
+    }
+  };
 
   const callApi = async (action: string, businessId?: string, name?: string) => {
     setError(null);
@@ -448,6 +471,17 @@ function BusinessManagerSection({ hasUserToken }: { hasUserToken: boolean }) {
                       onClick={() => void callApi("set-active", b.businessId)}
                     >
                       Set active
+                    </Button>
+                  )}
+                  {b.connected && (
+                    <Button
+                      size="slim"
+                      variant="plain"
+                      loading={healthBusy}
+                      disabled={busyId !== null || healthBusy}
+                      onClick={() => void checkHealth(b.businessId, b.name)}
+                    >
+                      🩺 Health check
                     </Button>
                   )}
                   {b.connected && (
