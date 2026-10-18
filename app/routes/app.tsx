@@ -50,6 +50,7 @@ export default function App() {
             <Link to="/app/wallet">Wallet</Link>
             <Link to="/app/billing">Pricing</Link>
             <Link to="/app/support">Support Chat</Link>
+            <Link to="/app/reviews">⭐ Reviews</Link>
             {isAdmin && <Link to="/app/admin">AI Control Panel</Link>}
           </>
         )}

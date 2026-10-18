@@ -16,7 +16,10 @@ import {
   Page,
   Select,
   Text,
+  TextField,
 } from "@shopify/polaris";
+
+import { Anim, Hero, PromoBanner } from "../components/ui";
 
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
@@ -236,20 +239,30 @@ export default function ScheduledPage() {
       primaryAction={{ content: "Compose new", url: "/app/compose" }}
     >
       <BlockStack gap="500">
+        <Anim index={0}>
+          <Hero
+            title="Scheduled Posts"
+            subtitle="Plan, schedule and auto-post your content"
+          />
+        </Anim>
+
         {/* ── Active package banner ── */}
         {activePackage && (
-          <Banner
-            title={`${activePackage.label} active`}
-            tone="success"
-          >
-            <Text as="p" variant="bodyMd">
-              {activePackage.usedPosts} of {activePackage.totalPosts} posts used ·
-              expires {new Date(activePackage.endsAt).toLocaleDateString()}
-            </Text>
-          </Banner>
+          <Anim index={1}>
+            <Banner
+              title={`${activePackage.label} active`}
+              tone="success"
+            >
+              <Text as="p" variant="bodyMd">
+                {activePackage.usedPosts} of {activePackage.totalPosts} posts used ·
+                expires {new Date(activePackage.endsAt).toLocaleDateString()}
+              </Text>
+            </Banner>
+          </Anim>
         )}
 
         {/* ── Auto-schedule packages ── */}
+        <Anim index={2}>
         <BlockStack gap="300">
           <InlineStack align="space-between" blockAlign="center">
             <Text as="h2" variant="headingMd">
@@ -274,6 +287,7 @@ export default function ScheduledPage() {
                 key={pkg.id}
                 columnSpan={{ xs: 6, sm: 2, md: 2, lg: 4, xl: 4 }}
               >
+                <div className="ap-card-hover">
                 <Card>
                   <Box padding="400">
                     <BlockStack gap="300">
@@ -295,6 +309,7 @@ export default function ScheduledPage() {
                     </BlockStack>
                   </Box>
                 </Card>
+                </div>
               </Grid.Cell>
             ))}
           </Grid>
@@ -305,8 +320,19 @@ export default function ScheduledPage() {
             </Text>
           </InlineStack>
         </BlockStack>
+        </Anim>
+
+        {/* ── Lifetime promo ── */}
+        <Anim index={3}>
+          <PromoBanner
+            icon="♾️"
+            title="Lifetime Auto-Post — save 25%"
+            description="One activation covers up to 10 posts a day for 3 months. No daily fees, no renewals to remember."
+          />
+        </Anim>
 
         {/* ── Lifetime Auto-Post ── */}
+        <Anim index={3}>
         <Card>
           <Box padding="400">
             <BlockStack gap="300">

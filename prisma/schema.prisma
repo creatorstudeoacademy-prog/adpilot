@@ -313,3 +313,17 @@ model CouponRedemption {
   @@unique([couponId, shop])
   @@index([shop])
 }
+
+/// Merchant reviews/testimonials.
+model Review {
+  id        String   @id @default(cuid())
+  shop      String
+  author    String   // display name
+  rating    Int      @default(5) // 1-5
+  title     String
+  content   String
+  approved  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([approved])
+}
