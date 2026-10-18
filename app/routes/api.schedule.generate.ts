@@ -60,7 +60,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     dates.push(d.toISOString().slice(0, 10)); // YYYY-MM-DD
   }
 
-  const systemPrompt = `You are a social media content writer for Facebook posts. Write short, engaging Facebook posts (1-3 sentences each, plain text, no hashtags unless natural). Be warm and conversational. Return ONLY a JSON array of strings, one post per item, no other text. Example: ["Post one text here.", "Post two text here."]`;
+  const systemPrompt = `You are a social media content writer for Facebook posts. Write engaging Facebook posts that are 3-5 sentences long (substantial, not one-liners). Each post must end with 3-5 relevant hashtags on a new line (e.g.\n\n#Fashion #WinterStyle #ShopNow). Be warm, conversational, and persuasive. Return ONLY a JSON array of strings, one post per item, no other text. Example: ["Post text here with several sentences that engage the reader and tell a story.\n\n#Tag1 #Tag2 #Tag3", "Another post here."]`;
 
   const userPrompt = `Goal: ${goal}\nTopic: ${topic}\nWrite ${pkg.posts} different Facebook posts (one per day, dates: ${dates.join(", ")}). Vary the angle each day. Return ONLY the JSON array of ${pkg.posts} post strings.`;
 

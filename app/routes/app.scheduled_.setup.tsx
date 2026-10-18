@@ -41,6 +41,17 @@ interface Draft {
 
 type Step = 1 | 2 | 3;
 
+const GOAL_OPTIONS = [
+  { label: "Increase Sales", value: "Increase Sales" },
+  { label: "Brand Awareness", value: "Brand Awareness" },
+  { label: "Boost Engagement", value: "Boost Engagement" },
+  { label: "Drive Website Traffic", value: "Drive Website Traffic" },
+  { label: "Product Launch", value: "Product Launch" },
+  { label: "Seasonal Promotion", value: "Seasonal Promotion" },
+  { label: "Customer Reviews & Trust", value: "Customer Reviews & Trust" },
+  { label: "Custom…", value: "__custom" },
+];
+
 export default function ScheduleSetup() {
   const { accounts, packages, perPostFee } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
@@ -48,8 +59,11 @@ export default function ScheduleSetup() {
   const [step, setStep] = useState<Step>(1);
   const [packageId, setPackageId] = useState(packages[0]?.id ?? "");
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
-  const [goal, setGoal] = useState("");
+  const [goal, setGoal] = useState(GOAL_OPTIONS[0].value);
+  const [customGoal, setCustomGoal] = useState("");
   const [topic, setTopic] = useState("");
+  const [suggestedTopics, setSuggestedTopics] = useState<string[]>([]);
+  const [suggesting, setSuggesting] = useState(false);
   const [startDate, setStartDate] = useState(
     new Date().toISOString().slice(0, 10),
   );
@@ -60,9 +74,37 @@ export default function ScheduleSetup() {
 
   const pkg = packages.find((p) => p.id === packageId);
 
+  const effectiveGoal = goal === "__custom" ? customGoal.trim() : goal;
+
+  const suggestTopics = async () => {
+    if (!effectiveGoal) {
+      setError("Pick a goal first.");
+      return;
+    }
+    setError(null);
+    setSuggesting(true);
+    try {
+      const res = await fetch("/api/schedule/suggest-topics", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ goal: effectiveGoal }),
+      });
+      const data = (await res.json()) as { ok: boolean; topics?: string[]; message?: string };
+      if (data.ok && data.topics) {
+        setSuggestedTopics(data.topics);
+      } else {
+        setError(data.message || "Couldn't suggest topics.");
+      }
+    } catch {
+      setError("Couldn't reach the server.");
+    } finally {
+      setSuggesting(false);
+    }
+  };
+
   const generate = async () => {
-    if (!goal.trim() || !topic.trim() || !accountId) {
-      setError("Please fill goal, topic, and select a page.");
+    if (!effectiveGoal || !topic.trim() || !accountId) {
+      setError("Please pick a goal, enter a topic, and select a page.");
       return;
     }
     setError(null);
@@ -71,7 +113,7 @@ export default function ScheduleSetup() {
       const res = await fetch("/api/schedule/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ packageId, goal, topic, startDate }),
+        body: JSON.stringify({ packageId, goal: effectiveGoal, topic, startDate }),
       });
       const data = (await res.json()) as {
         ok: boolean;
@@ -200,20 +242,55 @@ export default function ScheduleSetup() {
                   value={accountId}
                   onChange={setAccountId}
                 />
-                <TextField
+                <Select
                   label="Goal"
+                  options={GOAL_OPTIONS}
                   value={goal}
-                  onChange={setGoal}
-                  placeholder="e.g. Increase sales for my winter collection"
-                  autoComplete="off"
+                  onChange={(v) => {
+                    setGoal(v);
+                    setSuggestedTopics([]);
+                  }}
                 />
-                <TextField
-                  label="Topic"
-                  value={topic}
-                  onChange={setTopic}
-                  placeholder="e.g. Cozy winter fashion, new arrivals"
-                  autoComplete="off"
-                />
+                {goal === "__custom" && (
+                  <TextField
+                    label="Custom goal"
+                    value={customGoal}
+                    onChange={setCustomGoal}
+                    placeholder="e.g. Promote my new skincare line"
+                    autoComplete="off"
+                  />
+                )}
+                <BlockStack gap="200">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <Text as="p" variant="bodyMd" fontWeight="medium">
+                      Topic
+                    </Text>
+                    <Button
+                      variant="plain"
+                      loading={suggesting}
+                      onClick={() => void suggestTopics()}
+                    >
+                      ✨ Suggest topics
+                    </Button>
+                  </InlineStack>
+                  <TextField
+                    label="Topic"
+                    labelHidden
+                    value={topic}
+                    onChange={setTopic}
+                    placeholder="e.g. Cozy winter fashion, new arrivals"
+                    autoComplete="off"
+                  />
+                  {suggestedTopics.length > 0 && (
+                    <InlineStack gap="200">
+                      {suggestedTopics.map((t, i) => (
+                        <Button key={i} size="slim" onClick={() => setTopic(t)}>
+                          {t}
+                        </Button>
+                      ))}
+                    </InlineStack>
+                  )}
+                </BlockStack>
                 <TextField
                   label="Start date"
                   type="date"
