@@ -33,6 +33,7 @@ import { deduct, getWallet, isFreeShop, refund } from "../lib/wallet.server";
 import { logActivity } from "../lib/activity.server";
 import { POST_PUBLISH_FEE } from "../lib/pricing";
 import { NavButton } from "../components/NavButton";
+import { Anim, Hero } from "../components/ui";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -397,16 +398,27 @@ export default function ComposePage() {
   return (
     <Page title="Compose" subtitle="Create a post, reel, or video">
       <BlockStack gap="500">
+        <Anim index={0}>
+          <Hero
+            title="Compose"
+            subtitle="Create a post, reel, or video — publish now or schedule for later"
+          />
+        </Anim>
         {actionData && !actionData.ok && (
-          <Banner tone="critical">{actionData.error}</Banner>
+          <Anim index={1}>
+            <Banner tone="critical">{actionData.error}</Banner>
+          </Anim>
         )}
         {actionData?.ok && actionData.published && (
-          <Banner tone="success" onDismiss={() => {}}>
-            Your post was published!
-          </Banner>
+          <Anim index={1}>
+            <Banner tone="success" onDismiss={() => {}}>
+              Your post was published!
+            </Banner>
+          </Anim>
         )}
 
         {accounts.length === 0 ? (
+          <Anim index={1}>
           <Card>
             <BlockStack gap="300">
               <Text as="p" variant="bodyMd">
@@ -417,11 +429,14 @@ export default function ComposePage() {
               </NavButton>
             </BlockStack>
           </Card>
+          </Anim>
         ) : (
           <form onSubmit={handleSubmit}>
             <Layout>
               <Layout.Section>
                 <BlockStack gap="500">
+                  <Anim index={1}>
+                  <div className="ap-card-hover">
                   <Card>
                     <BlockStack gap="300">
                       <Text as="h2" variant="headingMd">
@@ -466,6 +481,10 @@ export default function ComposePage() {
                       )}
                     </BlockStack>
                   </Card>
+                  </div>
+                  </Anim>
+                  <Anim index={2}>
+                  <div className="ap-card-hover">
                   <Card>
                     <BlockStack gap="300">
                       <Text as="h2" variant="headingMd">
@@ -517,6 +536,10 @@ export default function ComposePage() {
                       </Button>
                     </BlockStack>
                   </Card>
+                  </div>
+                  </Anim>
+                  <Anim index={3}>
+                  <div className="ap-card-hover">
                   <Card>
                     <BlockStack gap="400">
                       <FormLayout>
@@ -619,11 +642,15 @@ export default function ComposePage() {
                       </FormLayout>
                     </BlockStack>
                   </Card>
+                  </div>
+                  </Anim>
                 </BlockStack>
               </Layout.Section>
 
               <Layout.Section variant="oneThird">
                 <BlockStack gap="500">
+                  <Anim index={2}>
+                  <div className="ap-card-hover">
                   <Card>
                     <BlockStack gap="300">
                       <Text as="h2" variant="headingMd">
@@ -652,7 +679,11 @@ export default function ComposePage() {
                       )}
                     </BlockStack>
                   </Card>
+                  </div>
+                  </Anim>
 
+                  <Anim index={3}>
+                  <div className="ap-card-hover">
                   <Card>
                     <BlockStack gap="300">
                       <Text as="h2" variant="headingMd">
@@ -687,6 +718,8 @@ export default function ComposePage() {
                       </Text>
                     </BlockStack>
                   </Card>
+                  </div>
+                  </Anim>
                 </BlockStack>
               </Layout.Section>
             </Layout>
