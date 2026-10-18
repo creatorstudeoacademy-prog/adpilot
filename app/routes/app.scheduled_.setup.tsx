@@ -11,6 +11,7 @@ import {
   Grid,
   InlineStack,
   Page,
+  ProgressBar,
   Select,
   Text,
   TextField,
@@ -70,6 +71,8 @@ export default function ScheduleSetup() {
   const [postTime, setPostTime] = useState("09:00");
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [busy, setBusy] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [genProgress, setGenProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   const pkg = packages.find((p) => p.id === packageId);
@@ -108,7 +111,13 @@ export default function ScheduleSetup() {
       return;
     }
     setError(null);
-    setBusy(true);
+    setGenerating(true);
+    setGenProgress(0);
+    // Animated progress while AI works (API is single-shot).
+    const target = pkg?.posts ?? 7;
+    const tick = setInterval(() => {
+      setGenProgress((p) => Math.min(p + 1, target));
+    }, 2500);
     try {
       const res = await fetch("/api/schedule/generate", {
         method: "POST",
@@ -120,16 +129,22 @@ export default function ScheduleSetup() {
         posts?: Draft[];
         message?: string;
       };
+      clearInterval(tick);
       if (data.ok && data.posts) {
         setDrafts(data.posts.map((p) => ({ ...p, time: postTime })));
-        setStep(3);
+        setGenProgress(target);
+        setTimeout(() => {
+          setGenerating(false);
+          setStep(3);
+        }, 600);
       } else {
+        setGenerating(false);
         setError(data.message || "Couldn't generate posts.");
       }
     } catch {
+      clearInterval(tick);
+      setGenerating(false);
       setError("Couldn't reach the server.");
-    } finally {
-      setBusy(false);
     }
   };
 
@@ -228,8 +243,32 @@ export default function ScheduleSetup() {
           </BlockStack>
         )}
 
+        {/* GENERATING — progress preview */}
+        {generating && (
+          <Card>
+            <Box padding="800">
+              <BlockStack gap="400" align="center">
+                <Text as="h2" variant="headingMd">
+                  ✍️ AI is writing your posts…
+                </Text>
+                <Box minWidth="300px" width="100%" maxWidth="400px">
+                  <ProgressBar
+                    progress={((pkg?.posts ?? 7) > 0 ? genProgress / (pkg?.posts ?? 7) : 0) * 100}
+                    tone="primary"
+                  />
+                </Box>
+                <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
+                  {genProgress} of {pkg?.posts ?? 7} posts ready
+                  <br />
+                  Writing engaging content with hashtags…
+                </Text>
+              </BlockStack>
+            </Box>
+          </Card>
+        )}
+
         {/* STEP 2 — goal & topic */}
-        {step === 2 && (
+        {step === 2 && !generating && (
           <Card>
             <Box padding="400">
               <BlockStack gap="400">
