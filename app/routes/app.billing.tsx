@@ -15,18 +15,25 @@ import {
 } from "@shopify/polaris";
 
 import { authenticate } from "../shopify.server";
+import prisma from "../db.server";
 import { getWallet } from "../lib/wallet.server";
 import { TOPUP_PACKS, POST_PUBLISH_FEE, OBJECTIVE_FEES } from "../lib/pricing";
 import { NavButton } from "../components/NavButton";
+import { ReviewShowcase } from "../components/ReviewShowcase";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const wallet = await getWallet(session.shop);
-  return json({ balance: wallet.balance });
+  const topReviews = await prisma.review.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 6,
+    select: { author: true, rating: true, title: true, content: true },
+  });
+  return json({ balance: wallet.balance, topReviews });
 };
 
 export default function BillingPage() {
-  const { balance } = useLoaderData<typeof loader>();
+  const { balance, topReviews } = useLoaderData<typeof loader>();
 
   return (
     <Page title="Pricing" subtitle="No monthly fees — pay only for what you use">
@@ -102,6 +109,8 @@ export default function BillingPage() {
               Topups are one-time charges handled securely by Shopify and appear
               on your regular Shopify invoice. Wallet credit never expires.
             </Text>
+
+            <ReviewShowcase reviews={topReviews} />
           </BlockStack>
         </Layout.Section>
       </Layout>

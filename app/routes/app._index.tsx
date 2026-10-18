@@ -29,12 +29,13 @@ import {
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { NavButton } from "../components/NavButton";
+import { ReviewShowcase } from "../components/ReviewShowcase";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const [accounts, scheduledCount, publishedCount, activeCampaigns, wallet, recentActivity] =
+  const [accounts, scheduledCount, publishedCount, activeCampaigns, wallet, recentActivity, topReviews] =
     await Promise.all([
       prisma.socialAccount.findMany({ where: { shop } }),
       prisma.scheduledPost.count({ where: { shop, status: "scheduled" } }),
@@ -46,6 +47,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         orderBy: { createdAt: "desc" },
         take: 6,
         select: { action: true, detail: true, createdAt: true },
+      }),
+      prisma.review.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 6,
+        select: { author: true, rating: true, title: true, content: true },
       }),
     ]);
 
@@ -79,6 +85,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       detail: a.detail ?? "",
       createdAt: a.createdAt.toISOString(),
     })),
+    topReviews,
   });
 };
 
@@ -172,6 +179,7 @@ export default function Dashboard() {
     setupDone,
     setupTotal,
     recentActivity,
+    topReviews,
   } = useLoaderData<typeof loader>();
 
   const showSetup = setupDone < setupTotal;
@@ -448,6 +456,8 @@ export default function Dashboard() {
             </Card>
           </Layout.Section>
         </Layout>
+
+        <ReviewShowcase reviews={topReviews} />
       </BlockStack>
     </Page>
   );
