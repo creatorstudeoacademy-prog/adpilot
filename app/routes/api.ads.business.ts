@@ -10,11 +10,12 @@ const GRAPH_VERSION = "v21.0";
 interface BusinessNode {
   id?: string;
   name?: string;
+  verification_status?: string;
 }
 
 async function fetchBusinesses(accessToken: string): Promise<BusinessNode[]> {
   const res = await fetch(
-    `https://graph.facebook.com/${GRAPH_VERSION}/me/businesses?fields=id,name&limit=50&access_token=${decryptToken(accessToken)}`,
+    `https://graph.facebook.com/${GRAPH_VERSION}/me/businesses?fields=id,name,verification_status&limit=50&access_token=${decryptToken(accessToken)}`,
   );
   const data = (await res.json()) as { data?: BusinessNode[]; error?: { message?: string } };
   if (data.error) throw new Error(data.error.message ?? "Could not load businesses.");
@@ -67,6 +68,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       businesses: remote.map((b) => ({
         businessId: b.id ?? "",
         name: b.name ?? "Business Manager",
+        verificationStatus: b.verification_status ?? "unknown",
         connected: byId.has(b.id ?? ""),
         isActive: byId.get(b.id ?? "")?.isActive ?? false,
       })),

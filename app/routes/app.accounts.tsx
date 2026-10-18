@@ -310,7 +310,7 @@ function AccountCard({
 
 function BusinessManagerSection({ hasUserToken }: { hasUserToken: boolean }) {
   const [businesses, setBusinesses] = useState<
-    Array<{ businessId: string; name: string; connected: boolean; isActive: boolean }>
+    Array<{ businessId: string; name: string; verificationStatus: string; connected: boolean; isActive: boolean }>
   >([]);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -329,7 +329,7 @@ function BusinessManagerSection({ hasUserToken }: { hasUserToken: boolean }) {
       const data = (await res.json()) as {
         ok: boolean;
         message?: string;
-        businesses?: Array<{ businessId: string; name: string; connected: boolean; isActive: boolean }>;
+        businesses?: Array<{ businessId: string; name: string; verificationStatus: string; connected: boolean; isActive: boolean }>;
       };
       if (!data.ok) throw new Error(data.message ?? "Request failed.");
       if (data.businesses) {
@@ -358,7 +358,7 @@ function BusinessManagerSection({ hasUserToken }: { hasUserToken: boolean }) {
       const data = (await res.json()) as {
         ok: boolean;
         message?: string;
-        businesses?: Array<{ businessId: string; name: string; connected: boolean; isActive: boolean }>;
+        businesses?: Array<{ businessId: string; name: string; verificationStatus: string; connected: boolean; isActive: boolean }>;
       };
       if (!data.ok) throw new Error(data.message ?? "Could not load Business Managers.");
       setBusinesses(data.businesses ?? []);
@@ -415,6 +415,11 @@ function BusinessManagerSection({ hasUserToken }: { hasUserToken: boolean }) {
                   <Text as="p" variant="bodyMd" fontWeight="semibold">
                     {b.name}
                   </Text>
+                  {b.verificationStatus.toLowerCase() === "verified" ? (
+                    <Badge tone="success">✓ Verified</Badge>
+                  ) : (
+                    <Badge tone="warning">Not verified</Badge>
+                  )}
                   {b.isActive && <Badge tone="success">Active</Badge>}
                   {b.connected && !b.isActive && <Badge>Connected</Badge>}
                 </InlineStack>
