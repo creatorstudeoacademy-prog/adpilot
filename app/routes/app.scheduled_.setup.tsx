@@ -4,6 +4,7 @@ import { json } from "@remix-run/node";
 import { useLoaderData, useNavigate } from "@remix-run/react";
 import {
   Banner,
+  Badge,
   BlockStack,
   Box,
   Button,
@@ -195,6 +196,47 @@ export default function ScheduleSetup() {
           </Banner>
         )}
 
+        {/* Step progress */}
+        <Card>
+          <Box padding="300">
+            <InlineStack gap="400" align="center">
+              {["Choose package", "Goal & topic", "Review & approve"].map((label, i) => {
+                const n = (i + 1) as Step;
+                const active = step === n;
+                const done = step > n;
+                return (
+                  <InlineStack key={label} gap="200" blockAlign="center">
+                    <div
+                      style={{
+                        width: "28px",
+                        height: "28px",
+                        borderRadius: "50%",
+                        background: done ? "#008060" : active ? "#5c6ac4" : "#e1e3e5",
+                        color: "#fff",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontWeight: 600,
+                        fontSize: "14px",
+                      }}
+                    >
+                      {done ? "✓" : n}
+                    </div>
+                    <Text
+                      as="p"
+                      variant="bodyMd"
+                      fontWeight={active ? "semibold" : undefined}
+                      tone={active || done ? undefined : "subdued"}
+                    >
+                      {label}
+                    </Text>
+                  </InlineStack>
+                );
+              })}
+            </InlineStack>
+          </Box>
+        </Card>
+
         {/* STEP 1 — package */}
         {step === 1 && (
           <BlockStack gap="300">
@@ -202,7 +244,7 @@ export default function ScheduleSetup() {
               Step 1 — Choose your package
             </Text>
             <Grid>
-              {packages.map((p) => (
+              {packages.map((p, idx) => (
                 <Grid.Cell key={p.id} columnSpan={{ xs: 6, sm: 2, md: 2, lg: 4, xl: 4 }}>
                   <div
                     onClick={() => setPackageId(p.id)}
@@ -214,14 +256,22 @@ export default function ScheduleSetup() {
                         background={packageId === p.id ? "bg-surface-selected" : undefined}
                       >
                         <BlockStack gap="200">
-                          <Text as="h3" variant="headingMd">
-                            {p.label}
-                          </Text>
+                          <InlineStack align="space-between" blockAlign="center">
+                            <Text as="h3" variant="headingMd">
+                              {p.label}
+                            </Text>
+                            {idx === packages.length - 1 && (
+                              <Badge tone="success">Best value</Badge>
+                            )}
+                          </InlineStack>
                           <Text as="p" variant="heading2xl">
                             ${p.fee.toFixed(2)}
                           </Text>
                           <Text as="p" variant="bodySm" tone="subdued">
-                            {p.posts} posts · {p.days} days
+                            {p.posts} posts · {p.days} days · ${(p.fee / p.posts).toFixed(2)}/post
+                          </Text>
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            Save ${(p.posts * perPostFee - p.fee).toFixed(2)} vs pay-per-post
                           </Text>
                           {packageId === p.id && (
                             <Text as="p" variant="bodySm" fontWeight="semibold">
