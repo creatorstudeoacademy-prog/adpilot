@@ -90,31 +90,35 @@ function formatDate(iso: string | null) {
 export default function ScheduledPage() {
   const { posts, activePackage, packages, fees } = useLoaderData<typeof loader>();
   const revalidator = useRevalidator();
-  const [buying, setBuying] = useState<string | null>(null);
   const [buyError, setBuyError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState("");
+  const [editDate, setEditDate] = useState("");
+  const [rowBusy, setRowBusy] = useState<string | null>(null);
 
-  const buyPackage = async (packageId: string) => {
-    setBuyError(null);
-    setBuying(packageId);
+  const rowAction = async (id: string, act: "update" | "delete") => {
+    setRowBusy(id);
     try {
-      const res = await fetch("/api/schedule/package", {
+      const res = await fetch("/api/schedule/post", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ packageId }),
+        body: JSON.stringify(
+          act === "delete"
+            ? { id, action: "delete" }
+            : { id, action: "update", content: editContent, date: editDate },
+        ),
       });
-      const data = (await res.json()) as {
-        ok: boolean;
-        message?: string;
-      };
+      const data = (await res.json()) as { ok: boolean; message?: string };
       if (data.ok) {
+        setEditingId(null);
         revalidator.revalidate();
       } else {
-        setBuyError(data.message || "Couldn't activate the package.");
+        setBuyError(data.message || "Couldn't update the post.");
       }
     } catch {
-      setBuyError("Couldn't reach the server. Please try again.");
+      setBuyError("Couldn't reach the server.");
     } finally {
-      setBuying(null);
+      setRowBusy(null);
     }
   };
 
@@ -127,6 +131,33 @@ export default function ScheduledPage() {
       {p.status}
     </Badge>,
     formatDate(p.scheduledAt ?? p.publishedAt),
+    (p.status === "scheduled" || p.status === "draft") ? (
+      <InlineStack key={`a-${p.id}`} gap="100">
+        <Button
+          size="slim"
+          variant="plain"
+          onClick={() => {
+            setEditingId(p.id);
+            setEditContent(posts.find((x) => x.id === p.id)?.content ?? "");
+            const iso = posts.find((x) => x.id === p.id)?.scheduledAt;
+            setEditDate(iso ? iso.slice(0, 10) : "");
+          }}
+        >
+          Edit
+        </Button>
+        <Button
+          size="slim"
+          variant="plain"
+          tone="critical"
+          loading={rowBusy === p.id}
+          onClick={() => void rowAction(p.id, "delete")}
+        >
+          Delete
+        </Button>
+      </InlineStack>
+    ) : (
+      <span key={`a-${p.id}`} />
+    ),
   ]);
 
   return (
@@ -151,9 +182,14 @@ export default function ScheduledPage() {
 
         {/* ── Auto-schedule packages ── */}
         <BlockStack gap="300">
-          <Text as="h2" variant="headingMd">
-            Auto-schedule packages
-          </Text>
+          <InlineStack align="space-between" blockAlign="center">
+            <Text as="h2" variant="headingMd">
+              Auto-schedule packages
+            </Text>
+            <Button url="/app/scheduled/setup" variant="primary">
+              Setup auto-schedule
+            </Button>
+          </InlineStack>
           <Text as="p" variant="bodyMd" tone="subdued">
             One payment covers all your scheduled text posts for the period.
             Manual upload available now — auto-post with photo & video coming soon.
@@ -183,11 +219,10 @@ export default function ScheduledPage() {
                       </Text>
                       <Button
                         variant="primary"
-                        loading={buying === pkg.id}
-                        disabled={!!activePackage || buying !== null}
-                        onClick={() => void buyPackage(pkg.id)}
+                        url={`/app/scheduled/setup`}
+                        disabled={!!activePackage}
                       >
-                        {activePackage ? "Active package running" : "Activate"}
+                        {activePackage ? "Active package running" : "Select & setup"}
                       </Button>
                     </BlockStack>
                   </Box>
@@ -256,10 +291,47 @@ export default function ScheduledPage() {
         ) : (
           <Card>
             <DataTable
-              columnContentTypes={["text", "text", "text", "text", "text", "text"]}
-              headings={["Content", "Account", "Type", "Platforms", "Status", "Date"]}
+              columnContentTypes={["text", "text", "text", "text", "text", "text", "text"]}
+              headings={["Content", "Account", "Type", "Platforms", "Status", "Date", "Actions"]}
               rows={rows}
             />
+          </Card>
+        )}
+
+        {/* ── Edit modal ── */}
+        {editingId && (
+          <Card>
+            <Box padding="400">
+              <BlockStack gap="300">
+                <Text as="h2" variant="headingMd">
+                  Edit scheduled post
+                </Text>
+                <TextField
+                  label="Date"
+                  type="date"
+                  value={editDate}
+                  onChange={setEditDate}
+                  autoComplete="off"
+                />
+                <TextField
+                  label="Content"
+                  value={editContent}
+                  onChange={setEditContent}
+                  multiline={4}
+                  autoComplete="off"
+                />
+                <InlineStack gap="200" align="end">
+                  <Button onClick={() => setEditingId(null)}>Cancel</Button>
+                  <Button
+                    variant="primary"
+                    loading={rowBusy === editingId}
+                    onClick={() => void rowAction(editingId, "update")}
+                  >
+                    Save changes
+                  </Button>
+                </InlineStack>
+              </BlockStack>
+            </Box>
           </Card>
         )}
       </BlockStack>
