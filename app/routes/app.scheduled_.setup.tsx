@@ -185,7 +185,7 @@ export default function ScheduleSetup() {
   return (
     <Page
       title="Auto-schedule setup"
-      subtitle="Pick a package, tell us your goal — AI writes your posts"
+      subtitle="Pick a package, tell us your goal — auto-generate your posts"
       backAction={{ content: "Posts", url: "/app/scheduled" }}
     >
       <BlockStack gap="500">
@@ -249,7 +249,7 @@ export default function ScheduleSetup() {
             <Box padding="800">
               <BlockStack gap="400" align="center">
                 <Text as="h2" variant="headingMd">
-                  ✍️ AI is writing your posts…
+                  ✍️ Auto-generating your posts…
                 </Text>
                 <Box minWidth="300px" width="100%" maxWidth="400px">
                   <ProgressBar
@@ -348,7 +348,7 @@ export default function ScheduleSetup() {
                 <InlineStack gap="200" align="end">
                   <Button onClick={() => setStep(1)}>Back</Button>
                   <Button variant="primary" loading={busy} onClick={() => void generate()}>
-                    Generate {pkg?.posts ?? ""} posts with AI
+                    Auto-generate {pkg?.posts ?? ""} posts
                   </Button>
                 </InlineStack>
               </BlockStack>
