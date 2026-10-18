@@ -20,7 +20,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  let body: { topic?: unknown; objective?: unknown; tone?: unknown } = {};
+  let body: { topic?: unknown; objective?: unknown; tone?: unknown; source?: unknown } = {};
   try {
     body = await request.json();
   } catch {
@@ -29,12 +29,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const topic = String(body.topic ?? "").trim();
   const objective = String(body.objective ?? "TRAFFIC").trim() || "TRAFFIC";
   const tone = String(body.tone ?? "Professional").trim() || "Professional";
+  // Funnel flows already charge the funnel fee — creative is included, no extra charge.
+  const funnelSource = String(body.source ?? "") === "funnel";
   if (!topic) {
     return json({ ok: false, error: "Describe what the ad is about." }, { status: 400 });
   }
 
-  // Charge first (skip for free shops), refund if AI fails.
-  const free = isFreeShop(shop);
+  // Charge first (skip for free shops and funnel flows — funnel fee covers creative), refund if AI fails.
+  const free = isFreeShop(shop) || funnelSource;
   if (!free) {
     const wallet = await getWallet(shop);
     if (wallet.balance < FEE) {

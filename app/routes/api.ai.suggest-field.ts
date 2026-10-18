@@ -10,9 +10,9 @@ import { logActivity } from "../lib/activity.server";
  * POST /api/ai/suggest-field
  * Body (JSON): { field: "headline" | "primaryText" | "description", topic }
  *
- * Generates a single field suggestion. Small fee ($0.05) per use.
+ * Generates a single field suggestion. FREE — the funnel fee already covers it.
  */
-const FEE = 0.05;
+const FEE = 0;
 
 const FIELD_PROMPT: Record<string, string> = {
   headline: "Write ONE short punchy ad headline (max 60 characters). Return ONLY the headline text, nothing else.",

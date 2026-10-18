@@ -298,6 +298,10 @@ export default function FullFunnel() {
   const busy = nav.state === "submitting";
 
   const [step, setStep] = useState(1);
+  const [quickMode, setQuickMode] = useState(false);
+  const [quickGoal, setQuickGoal] = useState("SALES");
+  const [quickBudget, setQuickBudget] = useState("30");
+  const [quickBusy, setQuickBusy] = useState(false);
   const [adAccountDbId, setAdAccountDbId] = useState(adAccounts[0]?.id ?? "");
   const [name, setName] = useState("");
   const [productUrl, setProductUrl] = useState("");
@@ -395,6 +399,49 @@ export default function FullFunnel() {
   const canNext3 =
     headline.trim() && primaryText.trim() && imageUrl.trim();
 
+  /** Quick mode: 3 selections → AI creative → publish full funnel. */
+  const quickCreate = async () => {
+    if (quickBusy || !name.trim() || !productUrl.trim()) return;
+    setQuickBusy(true);
+    setAiFillError("");
+    try {
+      // 1. Generate creative.
+      const res = await fetch("/api/ai/generate-creative", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic: name.trim(),
+          objective: quickGoal,
+          tone: "Professional",
+          source: "funnel",
+        }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Creative generation failed.");
+
+      // 2. Publish with generated creative + quick selections.
+      const fd = new FormData();
+      fd.append("adAccountDbId", adAccountDbId);
+      fd.append("name", name);
+      fd.append("productUrl", productUrl);
+      fd.append("totalBudget", quickBudget);
+      fd.append("country", country);
+      fd.append("ageMin", ageMin);
+      fd.append("ageMax", ageMax);
+      fd.append("headline", data.headline ?? "");
+      fd.append("primaryText", data.primaryText ?? "");
+      fd.append("description", data.description ?? "");
+      fd.append("imageUrl", imageUrl);
+      fd.append("destinationUrl", productUrl);
+      fd.append("cta", cta);
+      submit(fd, { method: "post" });
+    } catch (e) {
+      setAiFillError(e instanceof Error ? e.message : "Quick create failed.");
+    } finally {
+      setQuickBusy(false);
+    }
+  };
+
   return (
     <Page
       title="Full-Funnel Campaign"
@@ -413,6 +460,94 @@ export default function FullFunnel() {
           </Banner>
         )}
 
+        <InlineStack gap="200" align="end">
+          <Button
+            variant={quickMode ? "primary" : undefined}
+            onClick={() => setQuickMode((v) => !v)}
+          >
+            {quickMode ? "✓ Quick mode" : "Quick mode"}
+          </Button>
+        </InlineStack>
+
+        {quickMode ? (
+          <Card>
+            <BlockStack gap="400">
+              <Text as="h2" variant="headingMd">
+                ⚡ Quick Funnel — just 3 selections
+              </Text>
+              {aiFillError && (
+                <Banner tone="critical">
+                  <p>{aiFillError}</p>
+                </Banner>
+              )}
+              <TextField
+                label="1. What is the campaign about?"
+                value={name}
+                onChange={setName}
+                placeholder="e.g. Winter Jacket Launch"
+                autoComplete="off"
+              />
+              <TextField
+                label="Product / website URL"
+                value={productUrl}
+                onChange={setProductUrl}
+                placeholder="https://yourstore.com/products/..."
+                autoComplete="off"
+              />
+              <BlockStack gap="200">
+                <Text as="p" variant="bodyMd" fontWeight="semibold">
+                  2. Pick your goal
+                </Text>
+                <InlineStack gap="200">
+                  {[
+                    { label: "🛒 Sales", value: "SALES" },
+                    { label: "👥 Traffic", value: "TRAFFIC" },
+                    { label: "❤️ Engagement", value: "ENGAGEMENT" },
+                  ].map((g) => (
+                    <Button
+                      key={g.value}
+                      variant={quickGoal === g.value ? "primary" : undefined}
+                      onClick={() => setQuickGoal(g.value)}
+                    >
+                      {g.label}
+                    </Button>
+                  ))}
+                </InlineStack>
+              </BlockStack>
+              <BlockStack gap="200">
+                <Text as="p" variant="bodyMd" fontWeight="semibold">
+                  3. Daily budget
+                </Text>
+                <InlineStack gap="200">
+                  {["10", "20", "30", "50"].map((b) => (
+                    <Button
+                      key={b}
+                      variant={quickBudget === b ? "primary" : undefined}
+                      onClick={() => setQuickBudget(b)}
+                    >
+                      ${b}/day
+                    </Button>
+                  ))}
+                </InlineStack>
+              </BlockStack>
+              <Text as="p" variant="bodySm" tone="subdued">
+                We auto-write your ad creative, create 3 audiences and launch
+                all 3 funnel stages. Fee: ${FUNNEL_TOTAL_FEE.toFixed(2)} (no
+                extra charge for creative).
+              </Text>
+              <Button
+                variant="primary"
+                size="large"
+                loading={quickBusy}
+                disabled={!name.trim() || !productUrl.trim()}
+                onClick={() => void quickCreate()}
+              >
+                🚀 Create full funnel
+              </Button>
+            </BlockStack>
+          </Card>
+        ) : (
+          <>
         {/* Stepper */}
         <Card>
           <InlineStack gap="400">
@@ -600,7 +735,7 @@ export default function FullFunnel() {
                     disabled={!name.trim()}
                     onClick={() => void suggestField("headline", setHeadline)}
                   >
-                    ✨ Suggest ($0.05)
+                    ✨ Suggest
                   </Button>
                 }
               />
@@ -617,7 +752,7 @@ export default function FullFunnel() {
                     disabled={!name.trim()}
                     onClick={() => void suggestField("primaryText", setPrimaryText)}
                   >
-                    ✨ Suggest ($0.05)
+                    ✨ Suggest
                   </Button>
                 }
               />
@@ -632,7 +767,7 @@ export default function FullFunnel() {
                     disabled={!name.trim()}
                     onClick={() => void suggestField("description", setDescription)}
                   >
-                    ✨ Suggest ($0.05)
+                    ✨ Suggest
                   </Button>
                 }
               />
@@ -806,6 +941,7 @@ export default function FullFunnel() {
             </BlockStack>
           </Card>
         )}
+          </>
       </BlockStack>
 
       <Layout.Section>
