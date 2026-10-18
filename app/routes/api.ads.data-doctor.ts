@@ -7,7 +7,7 @@ import { decryptToken } from "../lib/token-vault.server";
 import { getPixelInfo, getAdPixels } from "../lib/meta-ads.server";
 import { deduct } from "../lib/wallet.server";
 import { checkRateLimit } from "../lib/rate-limit.server";
-import { logActivity } from "../lib/activity-log.server";
+import { logActivity } from "../lib/activity.server";
 
 const META_VERSION = "v21.0";
 const FIX_FEE = 1.5; // USD — one-click pixel fix
