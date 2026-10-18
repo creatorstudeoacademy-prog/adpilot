@@ -299,13 +299,16 @@ export async function action({ request }: ActionFunctionArgs) {
 
   if (intent === "fix") {
     const fixAction = String(form.get("fixAction") ?? "");
-    const rl = await checkRateLimit(shop, "data_doctor_fix", 20);
-    if (!rl.allowed) return json({ ok: false, message: "Too many fix attempts. Try again tomorrow." }, { status: 429 });
 
+    // Opening the permission page is not a real fix (no fee, no side effect) —
+    // never rate-limit it.
     if (fixAction.startsWith("reinstall|")) {
       const url = fixAction.slice("reinstall|".length);
       return json({ ok: true, redirect: url, message: "Opening the permission grant page…" });
     }
+
+    const rl = await checkRateLimit(shop, "data_doctor_fix", 20);
+    if (!rl.allowed) return json({ ok: false, message: "Too many fix attempts. Try again tomorrow." }, { status: 429 });
 
     if (fixAction === "fix_filters") {
       await deduct(shop, FIX_FEE, `Pixel Doctor: enabled all data-quality filters`);
