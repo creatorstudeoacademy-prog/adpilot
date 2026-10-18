@@ -313,6 +313,30 @@ export default function FullFunnel() {
   const [cta, setCta] = useState("SHOP_NOW");
   const [aiFilling, setAiFilling] = useState(false);
   const [aiFillError, setAiFillError] = useState("");
+  const [suggesting, setSuggesting] = useState<string | null>(null);
+
+  const suggestField = async (
+    field: "headline" | "primaryText" | "description",
+    setter: (v: string) => void,
+  ) => {
+    if (suggesting || !name.trim()) return;
+    setSuggesting(field);
+    setAiFillError("");
+    try {
+      const res = await fetch("/api/ai/suggest-field", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ field, topic: name.trim() }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Suggestion failed.");
+      setter(data.suggestion);
+    } catch (e) {
+      setAiFillError(e instanceof Error ? e.message : "Suggestion failed.");
+    } finally {
+      setSuggesting(null);
+    }
+  };
 
   const fillWithAI = async () => {
     if (aiFilling || !name.trim()) return;
@@ -570,6 +594,15 @@ export default function FullFunnel() {
                 onChange={setHeadline}
                 autoComplete="off"
                 placeholder="e.g. Winter Sale — Up to 40% Off"
+                connectedRight={
+                  <Button
+                    loading={suggesting === "headline"}
+                    disabled={!name.trim()}
+                    onClick={() => void suggestField("headline", setHeadline)}
+                  >
+                    ✨ Suggest ($0.05)
+                  </Button>
+                }
               />
               <TextField
                 label="Primary text"
@@ -578,12 +611,30 @@ export default function FullFunnel() {
                 multiline={3}
                 autoComplete="off"
                 placeholder="e.g. Stay warm in style..."
+                connectedRight={
+                  <Button
+                    loading={suggesting === "primaryText"}
+                    disabled={!name.trim()}
+                    onClick={() => void suggestField("primaryText", setPrimaryText)}
+                  >
+                    ✨ Suggest ($0.05)
+                  </Button>
+                }
               />
               <TextField
                 label="Description (optional)"
                 value={description}
                 onChange={setDescription}
                 autoComplete="off"
+                connectedRight={
+                  <Button
+                    loading={suggesting === "description"}
+                    disabled={!name.trim()}
+                    onClick={() => void suggestField("description", setDescription)}
+                  >
+                    ✨ Suggest ($0.05)
+                  </Button>
+                }
               />
               <TextField
                 label="Image / video URL"
