@@ -13,6 +13,7 @@ import {
 } from "@shopify/polaris";
 
 import { authenticate } from "../shopify.server";
+import { Anim, Hero } from "../components/ui";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
@@ -78,6 +79,14 @@ export default function SupportChat() {
   return (
     <Page title="Support Chat" subtitle="Ask anything about AdPilot — free, powered by AI">
       <BlockStack gap="400">
+        <Anim index={0}>
+          <Hero
+            title="Support Chat"
+            subtitle="Ask anything about AdPilot — free, replies instantly"
+          />
+        </Anim>
+        <Anim index={1}>
+        <div className="ap-card-hover">
         <Card>
           <Box padding="400">
             <BlockStack gap="300">
@@ -176,6 +185,8 @@ export default function SupportChat() {
             </BlockStack>
           </Box>
         </Card>
+        </div>
+        </Anim>
       </BlockStack>
     </Page>
   );
