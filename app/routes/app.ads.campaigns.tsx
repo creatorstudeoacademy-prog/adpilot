@@ -19,6 +19,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { deleteCampaign, getCampaigns, toggleCampaign } from "../lib/meta-ads.server";
 import { Anim, Hero } from "../components/ui";
+import CampaignAnalysis from "../components/CampaignAnalysis";
 
 // In-memory cache for Meta campaign lists: 5-minute TTL per ad account.
 // Avoids hammering the Graph API (rate limits) on every page load.
@@ -307,9 +308,22 @@ export default function Campaigns() {
   const nav = useNavigation();
   const busy = nav.state === "submitting";
   const [analyzing, setAnalyzing] = useState<string | null>(null);
-  const [analysis, setAnalysis] = useState<{ id: string; text: string } | null>(null);
+  const [analysis, setAnalysis] = useState<{
+    id: string;
+    text: string;
+    insights?: {
+      impressions?: number;
+      reach?: number | null;
+      clicks?: number;
+      spend?: number;
+      ctr?: number;
+      cpc?: number;
+      cpm?: number;
+    } | null;
+    campaignName?: string;
+  } | null>(null);
 
-  const analyze = async (id: string) => {
+  const analyze = async (id: string, campaignName?: string) => {
     if (analyzing) return;
     setAnalyzing(id);
     setAnalysis(null);
@@ -321,7 +335,7 @@ export default function Campaigns() {
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || "Analysis failed.");
-      setAnalysis({ id, text: data.analysis });
+      setAnalysis({ id, text: data.analysis, insights: data.insights ?? null, campaignName });
     } catch (e) {
       setAnalysis({ id, text: `Error: ${e instanceof Error ? e.message : "failed"}` });
     } finally {
@@ -329,7 +343,7 @@ export default function Campaigns() {
     }
   };
 
-  const analyzeMeta = async (id: string, metaCampaignId: string, adAccountId: string) => {
+  const analyzeMeta = async (id: string, metaCampaignId: string, adAccountId: string, campaignName?: string) => {
     if (analyzing) return;
     setAnalyzing(id);
     setAnalysis(null);
@@ -341,7 +355,7 @@ export default function Campaigns() {
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || "Analysis failed.");
-      setAnalysis({ id, text: data.analysis });
+      setAnalysis({ id, text: data.analysis, insights: data.insights ?? null, campaignName });
     } catch (e) {
       setAnalysis({ id, text: `Error: ${e instanceof Error ? e.message : "failed"}` });
     } finally {
@@ -439,7 +453,7 @@ export default function Campaigns() {
         variant="plain"
         disabled={analyzing === c.id}
         loading={analyzing === c.id}
-        onClick={() => analyze(c.id)}
+        onClick={() => analyze(c.id, c.name)}
       >
         📊 Analyze
       </Button>
@@ -459,7 +473,7 @@ export default function Campaigns() {
         variant="plain"
         disabled={analyzing === c.id}
         loading={analyzing === c.id}
-        onClick={() => analyzeMeta(c.id, c.metaCampaignId, c.adAccountId)}
+        onClick={() => analyzeMeta(c.id, c.metaCampaignId, c.adAccountId, c.name)}
       >
         📊 Analyze
       </Button>
@@ -513,26 +527,18 @@ export default function Campaigns() {
         {analysis && (
           <Anim index={2}>
             <div className="ap-card-hover">
-              <Card>
-                <BlockStack gap="300">
-                  <InlineStack align="space-between" blockAlign="center">
-                    <Text as="h2" variant="headingMd">
-                      📊 Campaign Analysis
-                    </Text>
-                    <Button variant="plain" onClick={() => setAnalysis(null)}>
-                      Close
-                    </Button>
-                  </InlineStack>
-                  <Text as="p" variant="bodyMd">
-                    {analysis.text.split("\n").map((line, i) => (
-                      <span key={i}>
-                        {line}
-                        <br />
-                      </span>
-                    ))}
-                  </Text>
-                </BlockStack>
-              </Card>
+              <BlockStack gap="200">
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <Button variant="plain" onClick={() => setAnalysis(null)}>
+                    Close
+                  </Button>
+                </div>
+                <CampaignAnalysis
+                  raw={analysis.text}
+                  insights={analysis.insights}
+                  campaignName={analysis.campaignName}
+                />
+              </BlockStack>
             </div>
           </Anim>
         )}

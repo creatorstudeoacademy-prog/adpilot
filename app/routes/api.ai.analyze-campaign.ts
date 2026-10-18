@@ -86,9 +86,19 @@ Rules:
 - Be specific: reference actual numbers (CTR, CPC, spend, etc.)
 - Give 2-4 concrete recommendations (budget, targeting, creative, etc.)
 - If spend is $0 or impressions are 0, explain likely causes (paused, under review, billing issue, etc.)
-- Keep it concise: use short bullet points, no fluff.
+- Keep it concise: short bullet points, no fluff.
 - No fake benchmarks — compare against general e-commerce norms only when useful.
-- Respond in plain text with simple formatting (no JSON).`;
+- Respond with ONLY a single JSON object, no markdown fences, no extra text. Use this exact shape:
+{
+  "score": <0-100 overall health score>,
+  "verdict": "<one-sentence overall verdict>",
+  "strengths": ["<what is working, with numbers>", ...],
+  "weaknesses": ["<what is not working, with numbers>", ...],
+  "recommendations": [
+    {"title": "<short action title>", "detail": "<1-2 sentence explanation>", "priority": "high|medium|low"},
+    ...
+  ]
+}`;
 
   const userPrompt =
     `Analyze this Meta ad campaign (last 30 days):\n` +
