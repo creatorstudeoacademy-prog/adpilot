@@ -94,9 +94,45 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
   }
 
+  // Auto-spread times: never allow two posts at the same date+time.
+  // Checks both the new batch AND already-scheduled posts in the DB.
+  // If a slot is taken, push forward in 30-min steps until free.
+  const existingTimes = await prisma.scheduledPost.findMany({
+    where: { shop, status: "scheduled", scheduledAt: { not: null } },
+    select: { scheduledAt: true },
+  });
+  const usedSlots = new Set<string>(
+    existingTimes.map((e) => e.scheduledAt!.toISOString().slice(0, 16)),
+  );
+  const spreadPosts = posts.map((p) => {
+    let [h, m] = p.time.split(":").map(Number);
+    let dateStr = p.date;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const key = `${dateStr}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+      if (!usedSlots.has(key)) {
+        usedSlots.add(key);
+        return { ...p, date: dateStr, time: `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}` };
+      }
+      m += 30;
+      if (m >= 60) {
+        m -= 60;
+        h += 1;
+      }
+      if (h >= 24) {
+        // Roll to next day at 09:00
+        const d = new Date(`${dateStr}T00:00:00Z`);
+        d.setUTCDate(d.getUTCDate() + 1);
+        dateStr = d.toISOString().slice(0, 10);
+        h = 9;
+        m = 0;
+      }
+    }
+  });
+
   // Create scheduled posts at the chosen date+time (multiple per date allowed).
   const created = await prisma.$transaction(
-    posts.map((p) =>
+    spreadPosts.map((p) =>
       prisma.scheduledPost.create({
         data: {
           shop,
