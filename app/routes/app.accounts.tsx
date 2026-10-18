@@ -229,7 +229,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
     try {
       const { getAdPixels } = await import("../lib/meta-ads.server");
-      const pixels = await getAdPixels(account.accountId, tokenRecord.accessToken);
+      const pixels = await getAdPixels(account.adAccountId, tokenRecord.accessToken);
       return json({ ok: true, pixels });
     } catch (e) {
       return json({
