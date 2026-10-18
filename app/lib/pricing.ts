@@ -132,7 +132,7 @@ export const AUTO_MEDIA_COMING_SOON = true;
 /* ── Lifetime Auto-Post (3-month billing cycles, up to 10 posts/day) ── */
 export const LIFETIME_MAX_POSTS_PER_DAY = 10;
 export const LIFETIME_BILLING_DAYS = 90;
-export const LIFETIME_DISCOUNT = 0.1; // 10% off for 3-month commitment
+export const LIFETIME_DISCOUNT = 0.25; // 25% off for 3-month commitment
 /** 3-month upfront fee for N posts/day. */
 export function lifetimeFee(postsPerDay: number): number {
   const n = Math.max(1, Math.min(LIFETIME_MAX_POSTS_PER_DAY, Math.floor(postsPerDay)));

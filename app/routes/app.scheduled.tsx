@@ -319,7 +319,7 @@ export default function ScheduledPage() {
                 )}
               </InlineStack>
               <Text as="p" variant="bodyMd" tone="subdued">
-                Billed per 3 months upfront (10% off) · 3-month minimum term ·
+                Billed per 3 months upfront (25% off) · 3-month minimum term ·
                 auto-renews unless turned off
               </Text>
               {lifetime ? (
