@@ -18,6 +18,7 @@ import {
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { deleteCampaign, getCampaigns, toggleCampaign } from "../lib/meta-ads.server";
+import { Anim, Hero } from "../components/ui";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -315,81 +316,103 @@ export default function Campaigns() {
       primaryAction={{ content: "Create campaign", url: "/app/ads/create" }}
     >
       <BlockStack gap="500">
+        <Anim index={0}>
+          <Hero
+            title="Campaigns"
+            subtitle="Toggle, analyze and manage your Meta campaigns"
+          />
+        </Anim>
         {published && (
-          <Banner tone="success">
-            Your campaign is live! Meta may take a few minutes to approve it.
-          </Banner>
+          <Anim index={1}>
+            <Banner tone="success">
+              Your campaign is live! Meta may take a few minutes to approve it.
+            </Banner>
+          </Anim>
         )}
-        <Card>
-          {campaigns.length === 0 ? (
-            <EmptyState
-              heading="No campaigns yet"
-              action={{ content: "Create campaign", url: "/app/ads/create" }}
-              image=""
-            >
-              <p>Create your first campaign in under 2 minutes.</p>
-            </EmptyState>
-          ) : (
-            <DataTable
-              columnContentTypes={["text", "text", "text", "text", "text", "text"]}
-              headings={["Name", "Objective", "Status", "Budget", "Ad account", "Actions"]}
-              rows={rows}
-            />
-          )}
-        </Card>
+        <Anim index={1}>
+          <div className="ap-card-hover">
+            <Card>
+              {campaigns.length === 0 ? (
+                <EmptyState
+                  heading="No campaigns yet"
+                  action={{ content: "Create campaign", url: "/app/ads/create" }}
+                  image=""
+                >
+                  <p>Create your first campaign in under 2 minutes.</p>
+                </EmptyState>
+              ) : (
+                <DataTable
+                  columnContentTypes={["text", "text", "text", "text", "text", "text"]}
+                  headings={["Name", "Objective", "Status", "Budget", "Ad account", "Actions"]}
+                  rows={rows}
+                />
+              )}
+            </Card>
+          </div>
+        </Anim>
         {analysis && (
-          <Card>
-            <BlockStack gap="300">
-              <InlineStack align="space-between" blockAlign="center">
-                <Text as="h2" variant="headingMd">
-                  📊 Campaign Analysis
-                </Text>
-                <Button variant="plain" onClick={() => setAnalysis(null)}>
-                  Close
-                </Button>
-              </InlineStack>
-              <Text as="p" variant="bodyMd">
-                {analysis.text.split("\n").map((line, i) => (
-                  <span key={i}>
-                    {line}
-                    <br />
-                  </span>
-                ))}
-              </Text>
-            </BlockStack>
-          </Card>
+          <Anim index={2}>
+            <div className="ap-card-hover">
+              <Card>
+                <BlockStack gap="300">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <Text as="h2" variant="headingMd">
+                      📊 Campaign Analysis
+                    </Text>
+                    <Button variant="plain" onClick={() => setAnalysis(null)}>
+                      Close
+                    </Button>
+                  </InlineStack>
+                  <Text as="p" variant="bodyMd">
+                    {analysis.text.split("\n").map((line, i) => (
+                      <span key={i}>
+                        {line}
+                        <br />
+                      </span>
+                    ))}
+                  </Text>
+                </BlockStack>
+              </Card>
+            </div>
+          </Anim>
         )}
         {metaFetchError && (
-          <Banner tone="warning">
-            Could not load live Meta campaigns: {metaFetchError}
-          </Banner>
+          <Anim index={2}>
+            <Banner tone="warning">
+              Could not load live Meta campaigns: {metaFetchError}
+            </Banner>
+          </Anim>
         )}
         {adAccountCount > 0 && (
-          <Card>
-            <BlockStack gap="300">
-              <Text as="h2" variant="headingMd">
-                From Meta Ads Manager
-              </Text>
-              {metaRows.length > 0 ? (
-                <>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Campaigns created directly in Meta — shown for reference.
+          <Anim index={3}>
+            <div className="ap-card-hover">
+              <Card>
+                <BlockStack gap="300">
+                  <Text as="h2" variant="headingMd">
+                    From Meta Ads Manager
                   </Text>
-                  <DataTable
-                    columnContentTypes={["text", "text", "text", "text", "text", "text"]}
-                    headings={["Name", "Objective", "Status", "Budget", "Ad account", "Actions"]}
-                    rows={metaRows}
-                  />
-                </>
-              ) : !metaFetchError ? (
-                <Text as="p" variant="bodySm" tone="subdued">
-                  {metaFetchAttempted
-                    ? "No campaigns found in your Meta ad accounts."
-                    : "Loading Meta campaigns…"}
-                </Text>
-              ) : null}
-            </BlockStack>
-          </Card>
+                  {metaRows.length > 0 ? (
+                    <>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Campaigns created directly in Meta — shown for reference.
+                      </Text>
+                      <DataTable
+                        columnContentTypes={["text", "text", "text", "text", "text", "text"]}
+                        headings={["Name", "Objective", "Status", "Budget", "Ad account", "Actions"]}
+                        rows={metaRows}
+                      />
+                    </>
+                  ) : !metaFetchError ? (
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      {metaFetchAttempted
+                        ? "No campaigns found in your Meta ad accounts."
+                        : "Loading Meta campaigns…"}
+                    </Text>
+                  ) : null}
+                </BlockStack>
+              </Card>
+            </div>
+          </Anim>
         )}
       </BlockStack>
     </Page>
