@@ -207,7 +207,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     status: getAgentStatus(a),
   }));
 
-  return json({ providers, aiFailures, skills: AI_SKILLS, agents: agentsJson, providerNames, coupons: await listCoupons() });
+  return json({ providers, aiFailures, skills: AI_SKILLS, agents: agentsJson, providerNames, coupons: await listCoupons(), couponStats: await couponStats() });
 };
 
 async function listCoupons() {
@@ -225,6 +225,32 @@ async function listCoupons() {
     }));
   } catch {
     return [];
+  }
+}
+
+async function couponStats() {
+  try {
+    const [created, sent, used, couponTopups] = await Promise.all([
+      prisma.coupon.count(),
+      prisma.shopCoupon.count(),
+      prisma.couponRedemption.count(),
+      prisma.walletTransaction.findMany({
+        where: { description: { contains: "coupon" } },
+        select: { amount: true },
+      }),
+    ]);
+    const topupRevenue = couponTopups
+      .filter((t) => t.amount > 0)
+      .reduce((s, t) => s + t.amount, 0);
+    return {
+      created,
+      sent,
+      used,
+      topupRevenue: Math.round(topupRevenue * 100) / 100,
+      topupCount: couponTopups.filter((t) => t.amount > 0).length,
+    };
+  } catch {
+    return { created: 0, sent: 0, used: 0, topupRevenue: 0, topupCount: 0 };
   }
 }
 
@@ -894,7 +920,7 @@ function AgentsSection({
 }
 
 export default function AdminControlPanel() {
-  const { providers, aiFailures, skills, agents, providerNames, coupons } =
+  const { providers, aiFailures, skills, agents, providerNames, coupons, couponStats } =
     useLoaderData<typeof loader>();
   const actionData = useActionData<{ agentError?: string; providerError?: string }>();
   const [seedBusy, setSeedBusy] = useState(false);
@@ -1057,6 +1083,34 @@ export default function AdminControlPanel() {
                 <Text as="h2" variant="headingMd">
                   🎟️ Coupon codes
                 </Text>
+
+                {/* Stats dashboard */}
+                <Grid>
+                  {[
+                    { label: "Created", value: String(couponStats.created), icon: "🎟️" },
+                    { label: "Sent", value: String(couponStats.sent), icon: "📨" },
+                    { label: "Used", value: String(couponStats.used), icon: "✅" },
+                    { label: "Coupon top-ups", value: `$${couponStats.topupRevenue.toFixed(2)} (${couponStats.topupCount})`, icon: "💰" },
+                  ].map((s) => (
+                    <Grid.Cell key={s.label} columnSpan={{ xs: 6, sm: 3, md: 3, lg: 3, xl: 3 }}>
+                      <Box
+                        background="bg-surface-secondary"
+                        borderRadius="200"
+                        padding="300"
+                      >
+                        <BlockStack gap="100">
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            {s.icon} {s.label}
+                          </Text>
+                          <Text as="p" variant="headingLg">
+                            {s.value}
+                          </Text>
+                        </BlockStack>
+                      </Box>
+                    </Grid.Cell>
+                  ))}
+                </Grid>
+
                 <Text as="p" variant="bodyMd" tone="subdued">
                   Seed the default coupon codes (WELCOME10, LAUNCH15, BOOST10,
                   GROW20, ADS10) with expiry dates. Safe to run multiple times —
