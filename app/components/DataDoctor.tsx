@@ -13,7 +13,7 @@ interface DoctorIssue {
 
 interface Diagnosis {
   orderStats: { total: number; revenue: number; currency: string; testOrders: number; zeroValue: number; unpaid: number };
-  pixel: { id: string | null; name?: string; lastFired?: string | null };
+  pixel: { id: string | null; name?: string; lastFired?: string | null; websiteConnected?: boolean };
   pixelsAvailable: Array<{ id: string; name: string }>;
   issues: DoctorIssue[];
   fixFee: number;
@@ -60,8 +60,13 @@ export default function DataDoctor() {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body,
       });
-      const data = (await res.json()) as { ok: boolean; message?: string };
+      const data = (await res.json()) as { ok: boolean; message?: string; redirect?: string };
       if (!data.ok) throw new Error(data.message ?? "Fix failed.");
+      if (data.redirect) {
+        window.open(data.redirect, "_blank");
+        setResult("Permission page opened in a new tab — click Install/Update to grant access, then re-run diagnosis.");
+        return;
+      }
       setResult(data.message ?? "Fixed.");
       await run(); // refresh diagnosis
     } catch (e) {
@@ -147,6 +152,12 @@ export default function DataDoctor() {
                   ) : (
                     <Badge tone="critical">Not connected</Badge>
                   )}
+                  {diag.pixel.id &&
+                    (diag.pixel.websiteConnected ? (
+                      <Badge tone="success">🌐 Website: receiving data</Badge>
+                    ) : (
+                      <Badge tone="warning">🌐 Website: no data</Badge>
+                    ))}
                 </InlineStack>
                 {diag.pixel.id && diag.pixel.lastFired && (
                   <Text as="p" variant="bodySm" tone="subdued">

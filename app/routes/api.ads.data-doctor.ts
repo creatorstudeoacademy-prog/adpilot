@@ -64,11 +64,14 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const { session, admin } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const [adAccount, metaToken, pixelSettings] = await Promise.all([
-    prisma.adAccount.findFirst({ where: { shop } }),
+  const [adAccounts, metaToken, pixelSettings] = await Promise.all([
+    prisma.adAccount.findMany({ where: { shop }, orderBy: { createdAt: "asc" } }),
     prisma.metaUserToken.findUnique({ where: { shop } }),
     prisma.pixelSettings.findUnique({ where: { shop } }),
   ]);
+  // Prefer the ad account that actually has a pixel saved.
+  const adAccount =
+    adAccounts.find((a) => a.pixelId?.trim()) ?? adAccounts[0] ?? null;
 
   const issues: DoctorIssue[] = [];
   const userToken = metaToken ? decryptToken(metaToken.accessToken) : null;
@@ -88,11 +91,14 @@ export async function loader({ request }: LoaderFunctionArgs) {
       unpaid: real.filter((o) => o.displayFinancialStatus === "PENDING" || o.displayFinancialStatus === "UNPAID").length,
     };
   } catch (e) {
+    const reinstallUrl = `https://admin.shopify.com/store/${shop}/oauth/authorize?client_id=f5feb18942e0d098f96e02c31159d136&scope=read_products,read_orders&redirect_uri=https://adpilot-production-c9f8.up.railway.app/auth/callback`;
     issues.push({
       id: "orders_unreadable",
       severity: "warning",
       title: "Could not read Shopify orders",
-      detail: "AdPilot needs the read_orders scope to compare real sales with ad-reported purchases. Reinstall the app to grant it.",
+      detail: "AdPilot needs the read_orders permission to compare real sales with ad-reported purchases.",
+      fixLabel: "Grant permission",
+      fixAction: "reinstall|" + reinstallUrl,
     });
   }
 
@@ -180,6 +186,34 @@ export async function loader({ request }: LoaderFunctionArgs) {
     }
   }
 
+  // ---- 2b. Website connection check (our own collector = ground truth) ----
+  if (pixelId) {
+    const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const browserEvents = await prisma.pixelEvent.count({
+      where: { shop, pixelId, source: "browser", createdAt: { gte: dayAgo } },
+    });
+    const anyEvents = await prisma.pixelEvent.count({
+      where: { shop, pixelId, createdAt: { gte: dayAgo } },
+    });
+    if (browserEvents === 0) {
+      issues.push({
+        id: "website_not_connected",
+        severity: "critical",
+        title: "Pixel is NOT receiving website data",
+        detail:
+          anyEvents > 0
+            ? "Your pixel gets test/manual events, but ZERO events from your website in the last 24h. The web pixel is not installed or not enabled on your storefront."
+            : "No events from your website in the last 24h. The web pixel is not sending data.",
+        steps: [
+          "Deploy the web pixel: run 'shopify app deploy' from your terminal (one time).",
+          "Then in Shopify admin go to Online Store → Themes → Customize → App embeds → turn ON AdPilot.",
+          "Fill the app_url and shop fields in the pixel settings.",
+          "Visit your storefront once — the Pixel Live Hub should start showing live events within a minute.",
+        ],
+      });
+    }
+  }
+
   // ---- 3. Data-quality filter checks ----
   const filters = {
     dedupe: pixelSettings?.dedupeEnabled ?? true,
@@ -213,7 +247,16 @@ export async function loader({ request }: LoaderFunctionArgs) {
   return json({
     ok: true,
     orderStats,
-    pixel: { id: pixelId, name: pixelInfo?.name, lastFired: pixelInfo?.lastFired },
+    pixel: {
+      id: pixelId,
+      name: pixelInfo?.name,
+      lastFired: pixelInfo?.lastFired,
+      websiteConnected: pixelId
+        ? (await prisma.pixelEvent.count({
+            where: { shop, pixelId, source: "browser", createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
+          })) > 0
+        : false,
+    },
     pixelsAvailable,
     issues,
     fixFee: FIX_FEE,
@@ -230,6 +273,11 @@ export async function action({ request }: ActionFunctionArgs) {
     const fixAction = String(form.get("fixAction") ?? "");
     const rl = await checkRateLimit(shop, "data_doctor_fix", 20);
     if (!rl.allowed) return json({ ok: false, message: "Too many fix attempts. Try again tomorrow." }, { status: 429 });
+
+    if (fixAction.startsWith("reinstall|")) {
+      const url = fixAction.slice("reinstall|".length);
+      return json({ ok: true, redirect: url, message: "Opening the permission grant page…" });
+    }
 
     if (fixAction === "fix_filters") {
       await deduct(shop, FIX_FEE, `Pixel Doctor: enabled all data-quality filters`);
