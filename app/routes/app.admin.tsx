@@ -17,7 +17,7 @@ import {
   Text,
   TextField,
 } from "@shopify/polaris";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
@@ -904,6 +904,66 @@ export default function AdminControlPanel() {
   const [newDays, setNewDays] = useState("30");
   const [genBusy, setGenBusy] = useState(false);
   const [genMsg, setGenMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [couponReqs, setCouponReqs] = useState<Array<{
+    id: string;
+    shop: string;
+    message: string;
+    status: string;
+    createdAt: string;
+  }>>([]);
+  const [newShops, setNewShops] = useState<Array<{ shop: string; since: string }>>([]);
+  const [sendCouponCode, setSendCouponCode] = useState<Record<string, string>>({});
+  const [sendBusy, setSendBusy] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/admin/coupon-requests")
+      .then((r) => r.json())
+      .then((d) => {
+        setCouponReqs((d.requests ?? []).filter((r: { status: string }) => r.status === "pending"));
+        setNewShops(d.newShops ?? []);
+      })
+      .catch(() => {});
+  }, [seedMsg, genMsg]);
+
+  const sendCouponToRequest = async (requestId: string) => {
+    const code = sendCouponCode[requestId];
+    const coupon = coupons.find((c) => c.code === code);
+    if (!coupon) return;
+    // Need coupon id — fetch from list
+    setSendBusy(requestId);
+    try {
+      const res = await fetch("/api/admin/coupon-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "send", requestId, couponCode: code }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setCouponReqs((prev) => prev.filter((r) => r.id !== requestId));
+      }
+    } finally {
+      setSendBusy(null);
+    }
+  };
+
+  const sendCouponToShop = async (shop: string) => {
+    const code = sendCouponCode[shop];
+    if (!code) return;
+    setSendBusy(shop);
+    try {
+      const res = await fetch("/api/admin/coupon-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "send-to-shop", shop, couponCode: code }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setNewShops((prev) => prev.filter((s) => s.shop !== shop));
+      }
+    } finally {
+      setSendBusy(null);
+    }
+  };
 
   const seedCoupons = async () => {
     setSeedBusy(true);
@@ -1076,6 +1136,110 @@ export default function AdminControlPanel() {
                     String(c.uses),
                   ])}
                 />
+
+                <Text as="h3" variant="headingSm">
+                  📨 Coupon requests
+                </Text>
+                {couponReqs.length === 0 ? (
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    No pending requests.
+                  </Text>
+                ) : (
+                  <BlockStack gap="200">
+                    {couponReqs.map((r) => (
+                      <Box
+                        key={r.id}
+                        background="bg-surface-secondary"
+                        borderRadius="200"
+                        padding="300"
+                      >
+                        <InlineStack align="space-between" blockAlign="center">
+                          <BlockStack gap="050">
+                            <Text as="p" variant="bodyMd" fontWeight="semibold">
+                              {r.shop}
+                            </Text>
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              {new Date(r.createdAt).toLocaleDateString()}
+                              {r.message && ` — "${r.message}"`}
+                            </Text>
+                          </BlockStack>
+                          <InlineStack gap="200" blockAlign="center">
+                            <div style={{ minWidth: "150px" }}>
+                              <Select
+                                label="Coupon"
+                                labelHidden
+                                options={coupons
+                                  .filter((c) => c.active)
+                                  .map((c) => ({
+                                    label: `${c.code} (${c.bonusPercent}%)`,
+                                    value: c.code,
+                                  }))}
+                                value={sendCouponCode[r.id] ?? ""}
+                                onChange={(v) =>
+                                  setSendCouponCode((p) => ({ ...p, [r.id]: v }))
+                                }
+                              />
+                            </div>
+                            <Button
+                              variant="primary"
+                              size="slim"
+                              loading={sendBusy === r.id}
+                              disabled={!sendCouponCode[r.id]}
+                              onClick={() => void sendCouponToRequest(r.id)}
+                            >
+                              Send
+                            </Button>
+                          </InlineStack>
+                        </InlineStack>
+                      </Box>
+                    ))}
+                  </BlockStack>
+                )}
+
+                <Text as="h3" variant="headingSm">
+                  🆕 New shops — one-click send
+                </Text>
+                {newShops.length === 0 ? (
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    No new shops waiting for a coupon.
+                  </Text>
+                ) : (
+                  <BlockStack gap="200">
+                    {newShops.slice(0, 10).map((s) => (
+                      <InlineStack key={s.shop} align="space-between" blockAlign="center">
+                        <Text as="p" variant="bodyMd">
+                          {s.shop}
+                        </Text>
+                        <InlineStack gap="200" blockAlign="center">
+                          <div style={{ minWidth: "150px" }}>
+                            <Select
+                              label="Coupon"
+                              labelHidden
+                              options={coupons
+                                .filter((c) => c.active)
+                                .map((c) => ({
+                                  label: `${c.code} (${c.bonusPercent}%)`,
+                                  value: c.code,
+                                }))}
+                              value={sendCouponCode[s.shop] ?? ""}
+                              onChange={(v) =>
+                                setSendCouponCode((p) => ({ ...p, [s.shop]: v }))
+                              }
+                            />
+                          </div>
+                          <Button
+                            size="slim"
+                            loading={sendBusy === s.shop}
+                            disabled={!sendCouponCode[s.shop]}
+                            onClick={() => void sendCouponToShop(s.shop)}
+                          >
+                            Send
+                          </Button>
+                        </InlineStack>
+                      </InlineStack>
+                    ))}
+                  </BlockStack>
+                )}
               </BlockStack>
             </Card>
           </BlockStack>

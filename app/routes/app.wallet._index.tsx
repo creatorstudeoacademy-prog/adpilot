@@ -1,7 +1,7 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { useLoaderData, useSubmit, useNavigation, Form } from "@remix-run/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Banner,
   BlockStack,
@@ -69,6 +69,41 @@ export default function WalletPage() {
     error?: string;
   } | null>(null);
   const [couponChecking, setCouponChecking] = useState(false);
+  const [myCoupons, setMyCoupons] = useState<Array<{
+    code: string;
+    bonusPercent: number;
+    expiresAt: string;
+    expired: boolean;
+    used: boolean;
+  }>>([]);
+  const [reqBusy, setReqBusy] = useState(false);
+  const [reqMsg, setReqMsg] = useState<string | null>(null);
+
+  // Load coupons sent to this shop.
+  useEffect(() => {
+    fetch("/api/coupons/mine")
+      .then((r) => r.json())
+      .then((d) => setMyCoupons(d.coupons ?? []))
+      .catch(() => {});
+  }, []);
+
+  const requestCoupon = async () => {
+    setReqBusy(true);
+    setReqMsg(null);
+    try {
+      const res = await fetch("/api/coupons/mine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      setReqMsg(data.ok ? data.message : data.error);
+    } catch {
+      setReqMsg("Couldn't send the request.");
+    } finally {
+      setReqBusy(false);
+    }
+  };
 
   const checkCoupon = async () => {
     const code = coupon.trim().toUpperCase();
@@ -182,6 +217,67 @@ export default function WalletPage() {
                   )}
                   {couponState && !couponState.ok && (
                     <Banner tone="critical">{couponState.error}</Banner>
+                  )}
+                </BlockStack>
+
+                {/* My coupons */}
+                <BlockStack gap="200">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <Text as="p" variant="bodyMd" fontWeight="semibold">
+                      🎟️ My coupons
+                    </Text>
+                    <Button variant="plain" loading={reqBusy} onClick={() => void requestCoupon()}>
+                      Request a coupon
+                    </Button>
+                  </InlineStack>
+                  {reqMsg && (
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      {reqMsg}
+                    </Text>
+                  )}
+                  {myCoupons.length === 0 ? (
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      No coupons yet — request one above!
+                    </Text>
+                  ) : (
+                    <BlockStack gap="200">
+                      {myCoupons.map((c) => (
+                        <Box
+                          key={c.code}
+                          background="bg-surface-secondary"
+                          borderRadius="200"
+                          padding="300"
+                        >
+                          <InlineStack align="space-between" blockAlign="center">
+                            <BlockStack gap="050">
+                              <Text as="p" variant="bodyMd" fontWeight="semibold">
+                                {c.code}
+                              </Text>
+                              <Text as="p" variant="bodySm" tone="subdued">
+                                {c.bonusPercent}% bonus · expires{" "}
+                                {new Date(c.expiresAt).toLocaleDateString()}
+                                {c.used && " · ✓ used"}
+                                {c.expired && !c.used && " · expired"}
+                              </Text>
+                            </BlockStack>
+                            {!c.used && !c.expired && (
+                              <Button
+                                size="slim"
+                                onClick={() => {
+                                  setCoupon(c.code);
+                                  setCouponState({
+                                    ok: true,
+                                    bonusPercent: c.bonusPercent,
+                                  });
+                                }}
+                              >
+                                Apply
+                              </Button>
+                            )}
+                          </InlineStack>
+                        </Box>
+                      ))}
+                    </BlockStack>
                   )}
                 </BlockStack>
                 <Grid>

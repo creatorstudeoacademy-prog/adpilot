@@ -300,6 +300,7 @@ model Coupon {
   active         Boolean  @default(true)
   createdAt      DateTime @default(now())
   redemptions    CouponRedemption[]
+  shopCoupons    ShopCoupon[]
 }
 
 /// One redemption per shop per coupon.
@@ -326,4 +327,28 @@ model Review {
   createdAt DateTime @default(now())
 
   @@index([approved])
+}
+
+/// Coupon requests from merchants.
+model CouponRequest {
+  id        String   @id @default(cuid())
+  shop      String
+  message   String   @default("")
+  status    String   @default("pending") // pending | sent | rejected
+  createdAt DateTime @default(now())
+
+  @@index([status])
+}
+
+/// Coupons assigned/sent to a specific shop (one-click send).
+model ShopCoupon {
+  id        String    @id @default(cuid())
+  couponId  String
+  coupon    Coupon    @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  shop      String
+  sentAt    DateTime  @default(now())
+  usedAt    DateTime?
+
+  @@unique([couponId, shop])
+  @@index([shop])
 }
