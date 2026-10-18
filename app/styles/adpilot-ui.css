@@ -1,0 +1,91 @@
+/* AdPilot modern UI — animations, gradients, banners */
+
+@keyframes ap-fade-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes ap-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes ap-pulse-soft {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.03); }
+}
+@keyframes ap-shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+@keyframes ap-gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+@keyframes ap-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+.ap-anim-up { animation: ap-fade-up 0.5s ease-out both; }
+.ap-anim-in { animation: ap-fade-in 0.4s ease-out both; }
+.ap-anim-1 { animation-delay: 0.05s; }
+.ap-anim-2 { animation-delay: 0.12s; }
+.ap-anim-3 { animation-delay: 0.19s; }
+.ap-anim-4 { animation-delay: 0.26s; }
+.ap-anim-5 { animation-delay: 0.33s; }
+
+.ap-hero {
+  background: linear-gradient(135deg, #5c6ac4 0%, #8b5cf6 50%, #ec4899 100%);
+  background-size: 200% 200%;
+  animation: ap-gradient-shift 8s ease infinite;
+  border-radius: 16px;
+  color: #fff;
+  position: relative;
+  overflow: hidden;
+}
+.ap-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 80% 20%, rgba(255,255,255,0.25), transparent 50%);
+  pointer-events: none;
+}
+
+.ap-card-hover {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.ap-card-hover:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 32px rgba(92, 106, 196, 0.18);
+}
+
+.ap-promo-banner {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border: 1px solid #f59e0b;
+  border-radius: 12px;
+  animation: ap-fade-up 0.5s ease-out both;
+}
+
+.ap-stat-card {
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #e1e3e5;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.ap-stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+.ap-gradient-text {
+  background: linear-gradient(135deg, #5c6ac4, #8b5cf6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.ap-shimmer {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 400px 100%;
+  animation: ap-shimmer 1.5s infinite;
+}

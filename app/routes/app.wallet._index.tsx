@@ -1,6 +1,7 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { useLoaderData, useSubmit, useNavigation, Form } from "@remix-run/react";
+import { useState } from "react";
 import {
   Banner,
   BlockStack,
@@ -11,11 +12,13 @@ import {
   InlineStack,
   Page,
   Text,
+  TextField,
 } from "@shopify/polaris";
 
 import { authenticate } from "../shopify.server";
 import { getTransactions, getWallet } from "../lib/wallet.server";
 import { TOPUP_PACKS } from "../lib/pricing";
+import { Anim, Hero, PromoBanner } from "../components/ui";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -55,7 +58,36 @@ export default function WalletPage() {
   const topup = (amount: number) => {
     const data = new FormData();
     data.set("amount", String(amount));
+    if (coupon.trim()) data.set("coupon", coupon.trim().toUpperCase());
     submit(data, { method: "post", action: "/app/wallet/topup" });
+  };
+
+  const [coupon, setCoupon] = useState("");
+  const [couponState, setCouponState] = useState<{
+    ok: boolean;
+    bonusPercent?: number;
+    error?: string;
+  } | null>(null);
+  const [couponChecking, setCouponChecking] = useState(false);
+
+  const checkCoupon = async () => {
+    const code = coupon.trim().toUpperCase();
+    if (!code) return;
+    setCouponChecking(true);
+    setCouponState(null);
+    try {
+      const res = await fetch("/api/wallet/validate-coupon", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      const data = await res.json();
+      setCouponState(data.ok ? { ok: true, bonusPercent: data.bonusPercent } : { ok: false, error: data.error });
+    } catch {
+      setCouponState({ ok: false, error: "Couldn't check the coupon." });
+    } finally {
+      setCouponChecking(false);
+    }
   };
 
   const rows = transactions.map((t) => [
@@ -67,6 +99,19 @@ export default function WalletPage() {
   return (
     <Page title="Wallet" subtitle="Prepaid credit for your ad spend">
       <BlockStack gap="500">
+        <Anim index={0}>
+          <Hero
+            title={`$${balance.toFixed(2)}`}
+            subtitle="Current balance — top up to keep your campaigns running"
+          />
+        </Anim>
+        <Anim index={1}>
+          <PromoBanner
+            icon="🎟️"
+            title="Got a coupon code? Get up to 20% extra bonus!"
+            description="Enter your coupon below before topping up — bonus credit lands instantly. Each code works once per store."
+          />
+        </Anim>
         {need && (
           <Banner tone="warning">
             You need at least ${need} to publish that campaign. Top up below.
@@ -108,6 +153,37 @@ export default function WalletPage() {
                   Charged once via Shopify. Credit lands in your wallet
                   instantly.
                 </Text>
+                <BlockStack gap="200">
+                  <Text as="p" variant="bodyMd" fontWeight="semibold">
+                    🎟️ Have a coupon code?
+                  </Text>
+                  <InlineStack gap="200" blockAlign="end">
+                    <div style={{ flexGrow: 1 }}>
+                      <TextField
+                        label="Coupon code"
+                        labelHidden
+                        value={coupon}
+                        onChange={(v) => {
+                          setCoupon(v);
+                          setCouponState(null);
+                        }}
+                        placeholder="e.g. WELCOME10"
+                        autoComplete="off"
+                      />
+                    </div>
+                    <Button loading={couponChecking} onClick={() => void checkCoupon()}>
+                      Apply
+                    </Button>
+                  </InlineStack>
+                  {couponState?.ok && (
+                    <Banner tone="success">
+                      ✓ {couponState.bonusPercent}% bonus credit applied to your top-up!
+                    </Banner>
+                  )}
+                  {couponState && !couponState.ok && (
+                    <Banner tone="critical">{couponState.error}</Banner>
+                  )}
+                </BlockStack>
                 <Grid>
                   {TOPUP_PACKS.map((pack) => (
                     <Grid.Cell key={String(pack.price)} columnSpan={{ xs: 6, sm: 2, md: 2, lg: 4, xl: 4 }}>

@@ -5,6 +5,13 @@ import {
   Scripts,
   ScrollRestoration,
 } from "@remix-run/react";
+import type { LinksFunction } from "@remix-run/node";
+
+import adpilotStyles from "./styles/adpilot-ui.css";
+
+export const links: LinksFunction = () => [
+  { rel: "stylesheet", href: adpilotStyles },
+];
 
 export default function App() {
   return (

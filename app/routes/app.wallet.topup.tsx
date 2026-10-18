@@ -2,6 +2,7 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json, redirect } from "@remix-run/node";
 
 import { authenticate } from "../shopify.server";
+import prisma from "../db.server";
 import { topup } from "../lib/wallet.server";
 import { logActivity } from "../lib/activity.server";
 import { TOPUP_PACKS } from "../lib/pricing";
@@ -19,6 +20,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shop = session.shop;
   const url = new URL(request.url);
   const chargeId = url.searchParams.get("charge_id");
+  const couponCode = (url.searchParams.get("coupon") ?? "").trim().toUpperCase();
 
   // Callback after the merchant approves the charge in Shopify admin.
   if (chargeId) {
@@ -43,17 +45,37 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       const pack = TOPUP_PACKS.find((p) => p.price === Math.round(amount));
       if (pack) {
         const bonus = pack.credit - pack.price;
+
+        // Coupon bonus: validate (not expired, not already used by this shop).
+        let couponBonus = 0;
+        let couponId: string | null = null;
+        if (couponCode) {
+          const coupon = await prisma.coupon.findUnique({ where: { code: couponCode } });
+          const alreadyUsed = coupon
+            ? await prisma.couponRedemption.findUnique({
+                where: { couponId_shop: { couponId: coupon.id, shop } },
+              })
+            : null;
+          if (coupon && coupon.active && coupon.expiresAt >= new Date() && !alreadyUsed) {
+            couponBonus = Math.round(((pack.price * coupon.bonusPercent) / 100) * 100) / 100;
+            couponId = coupon.id;
+            await prisma.couponRedemption.create({
+              data: { couponId: coupon.id, shop },
+            });
+          }
+        }
+
         await topup(
           shop,
           pack.price,
-          `Wallet topup via Shopify — ${charge.name}`,
+          `Wallet topup via Shopify — ${charge.name}${couponCode ? ` (coupon ${couponCode})` : ""}`,
           chargeId,
-          bonus,
+          bonus + couponBonus,
         );
         logActivity({
           shop,
           action: "wallet_topup",
-          detail: `pack:$${pack.price} credit:$${pack.credit} charge:${chargeId}`,
+          detail: `pack:$${pack.price} credit:$${pack.credit} couponBonus:$${couponBonus} charge:${chargeId}`,
           feeCharged: pack.price,
         });
       }
@@ -70,13 +92,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const shop = session.shop;
   const form = await request.formData();
   const amount = Math.round(parseFloat(String(form.get("amount") ?? "0")));
+  const couponCode = String(form.get("coupon") ?? "").trim().toUpperCase();
 
   if (!ALLOWED_AMOUNTS.includes(amount)) {
     return json({ ok: false, error: "Invalid topup amount." });
   }
 
   const appUrl = process.env.SHOPIFY_APP_URL ?? "";
-  const returnUrl = `${appUrl}/app/wallet/topup`;
+  const returnUrl = couponCode
+    ? `${appUrl}/app/wallet/topup?coupon=${encodeURIComponent(couponCode)}`
+    : `${appUrl}/app/wallet/topup`;
 
   const response = await admin.graphql(
     `#graphql
