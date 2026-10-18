@@ -634,13 +634,13 @@ export default function CreateCampaign() {
               {(() => {
                 const selected = adAccounts.find((a) => a.id === adAccountDbId);
                 return selected?.pixelId ? (
-                  <BlockStack gap=\"100\">
-                    <Text as=\"p\" variant=\"bodySm\" tone=\"success\">
+                  <BlockStack gap="100">
+                    <Text as="p" variant="bodySm" tone="success">
                       ✓ Meta Pixel {selected.pixelId} connected — conversions will be tracked
                     </Text>
                     <Button
-                      size=\"slim\"
-                      variant=\"plain\"
+                      size="slim"
+                      variant="plain"
                       disabled={busy}
                       loading={pixelTesting}
                       onClick={sendPixelTest}
@@ -648,7 +648,7 @@ export default function CreateCampaign() {
                       Send test event
                     </Button>
                     {pixelTestMsg && (
-                      <Text as=\"p\" variant=\"bodySm\" tone={pixelTestOk ? \"success\" : \"critical\"}>
+                      <Text as="p" variant="bodySm" tone={pixelTestOk ? "success" : "critical"}>
                         {pixelTestMsg}
                       </Text>
                     )}
