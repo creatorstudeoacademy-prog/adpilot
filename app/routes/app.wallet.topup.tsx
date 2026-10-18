@@ -62,6 +62,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             await prisma.couponRedemption.create({
               data: { couponId: coupon.id, shop },
             });
+            // Mark the sent coupon as used.
+            await prisma.shopCoupon.updateMany({
+              where: { couponId: coupon.id, shop },
+              data: { usedAt: new Date() },
+            });
           }
         }
 

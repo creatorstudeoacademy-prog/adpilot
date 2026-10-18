@@ -57,6 +57,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ ok: false, error: "You already have a pending request." }, { status: 400 });
   }
 
+  // If they have an unused, unexpired coupon — use it first.
+  const unused = await prisma.shopCoupon.findFirst({
+    where: { shop, usedAt: null, coupon: { active: true, expiresAt: { gte: new Date() } } },
+    include: { coupon: true },
+  });
+  if (unused) {
+    const alreadyUsed = await prisma.couponRedemption.findUnique({
+      where: { couponId_shop: { couponId: unused.couponId, shop } },
+    });
+    if (!alreadyUsed) {
+      return json(
+        { ok: false, error: `You have an unused coupon (${unused.coupon.code}) — use it first!` },
+        { status: 400 },
+      );
+    }
+  }
+
   await prisma.couponRequest.create({
     data: {
       shop,
