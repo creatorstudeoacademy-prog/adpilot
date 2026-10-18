@@ -7,7 +7,7 @@ import {
 } from "@remix-run/react";
 import type { LinksFunction } from "@remix-run/node";
 
-import adpilotStyles from "./styles/adpilot-ui.css";
+import adpilotStyles from "./styles/adpilot-ui.css?url";
 
 export const links: LinksFunction = () => [
   { rel: "stylesheet", href: adpilotStyles },
