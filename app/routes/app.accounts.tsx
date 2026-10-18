@@ -307,6 +307,164 @@ function AccountCard({
   );
 }
 
+
+function BusinessManagerSection({ hasUserToken }: { hasUserToken: boolean }) {
+  const [businesses, setBusinesses] = useState<
+    Array<{ businessId: string; name: string; connected: boolean; isActive: boolean }>
+  >([]);
+  const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const callApi = async (action: string, businessId?: string, name?: string) => {
+    setError(null);
+    setBusyId(businessId ?? "load");
+    try {
+      const res = await fetch("/api/ads/business", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, businessId, name }),
+      });
+      const data = (await res.json()) as {
+        ok: boolean;
+        message?: string;
+        businesses?: Array<{ businessId: string; name: string; connected: boolean; isActive: boolean }>;
+      };
+      if (!data.ok) throw new Error(data.message ?? "Request failed.");
+      if (data.businesses) {
+        setBusinesses(data.businesses);
+        setLoaded(true);
+      } else {
+        // Refresh the list after connect / set-active / disconnect.
+        await load(false);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Request failed.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const load = async (withSpinner = true) => {
+    if (withSpinner) setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/ads/business", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "list" }),
+      });
+      const data = (await res.json()) as {
+        ok: boolean;
+        message?: string;
+        businesses?: Array<{ businessId: string; name: string; connected: boolean; isActive: boolean }>;
+      };
+      if (!data.ok) throw new Error(data.message ?? "Could not load Business Managers.");
+      setBusinesses(data.businesses ?? []);
+      setLoaded(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not load Business Managers.");
+    } finally {
+      if (withSpinner) setLoading(false);
+    }
+  };
+
+  return (
+    <div className="ap-card-hover">
+      <Card>
+        <BlockStack gap="200">
+          <InlineStack gap="200" blockAlign="center">
+            <Text as="h2" variant="headingMd">
+              Business Manager
+            </Text>
+            <div style={{ marginLeft: "auto" }}>
+              <Button
+                size="slim"
+                disabled={!hasUserToken || loading}
+                loading={loading}
+                onClick={() => void load()}
+              >
+                {loaded ? "Refresh" : "Load Business Managers"}
+              </Button>
+            </div>
+          </InlineStack>
+          <Text as="p" variant="bodySm" tone="subdued">
+            Connect your Meta Business Manager to find pixels across all of its
+            ad accounts and keep everything organized under one business.
+          </Text>
+          {!hasUserToken && (
+            <Text as="p" variant="bodySm" tone="subdued">
+              Connect Facebook first (paste a User Token above).
+            </Text>
+          )}
+          {error && (
+            <Text as="p" variant="bodySm" tone="critical">
+              {error}
+            </Text>
+          )}
+          {loaded && businesses.length === 0 && !error && (
+            <Text as="p" variant="bodySm" tone="subdued">
+              No Business Managers found on this Facebook account.
+            </Text>
+          )}
+          {businesses.map((b) => (
+            <InlineStack key={b.businessId} gap="200" blockAlign="center">
+              <BlockStack gap="050">
+                <InlineStack gap="200" blockAlign="center">
+                  <Text as="p" variant="bodyMd" fontWeight="semibold">
+                    {b.name}
+                  </Text>
+                  {b.isActive && <Badge tone="success">Active</Badge>}
+                  {b.connected && !b.isActive && <Badge>Connected</Badge>}
+                </InlineStack>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  ID: {b.businessId}
+                </Text>
+              </BlockStack>
+              <div style={{ marginLeft: "auto" }}>
+                <InlineStack gap="200">
+                  {!b.connected && (
+                    <Button
+                      size="slim"
+                      loading={busyId === b.businessId}
+                      disabled={busyId !== null}
+                      onClick={() => void callApi("connect", b.businessId, b.name)}
+                    >
+                      Connect
+                    </Button>
+                  )}
+                  {b.connected && !b.isActive && (
+                    <Button
+                      size="slim"
+                      loading={busyId === b.businessId}
+                      disabled={busyId !== null}
+                      onClick={() => void callApi("set-active", b.businessId)}
+                    >
+                      Set active
+                    </Button>
+                  )}
+                  {b.connected && (
+                    <Button
+                      size="slim"
+                      variant="plain"
+                      tone="critical"
+                      disabled={busyId !== null}
+                      onClick={() => void callApi("disconnect", b.businessId)}
+                    >
+                      Disconnect
+                    </Button>
+                  )}
+                </InlineStack>
+              </div>
+            </InlineStack>
+          ))}
+        </BlockStack>
+      </Card>
+    </div>
+  );
+}
+
 function PixelCard({
   adAccountId,
   currentPixelId,
@@ -318,6 +476,7 @@ function PixelCard({
 }) {
   const [pixelId, setPixelId] = useState(currentPixelId ?? "");
   const [pixels, setPixels] = useState<Array<{ id: string; name: string }> | null>(null);
+  const [pixelSource, setPixelSource] = useState<string | null>(null);
   const [fetching, setFetching] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const submit = useSubmit();
@@ -338,7 +497,7 @@ function PixelCard({
         body: JSON.stringify({ id: adAccountId }),
       });
       const text = await res.text();
-      let json: { ok?: boolean; pixels?: Array<{ id: string; name: string }>; message?: string } = {};
+      let json: { ok?: boolean; pixels?: Array<{ id: string; name: string }>; message?: string; source?: string } = {};
       try {
         json = JSON.parse(text);
       } catch {
@@ -346,8 +505,9 @@ function PixelCard({
       }
       if (json.ok) {
         setPixels(json.pixels ?? []);
+        setPixelSource(json.source === "business" ? "business" : null);
         if (!json.pixels || json.pixels.length === 0) {
-          setFetchError("No pixels found on this ad account — check it has a pixel assigned in Business Manager, or enter the Pixel ID manually.");
+          setFetchError("No pixels found — connect your Business Manager below and try again, or enter the Pixel ID manually.");
         }
       } else {
         setFetchError(json.message ?? "Failed to fetch pixels.");
@@ -390,6 +550,11 @@ function PixelCard({
           <BlockStack gap="100">
             <Text as="p" variant="bodySm" fontWeight="semibold">
               Select a pixel:
+              {pixelSource === "business" && (
+                <Text as="span" variant="bodySm" tone="subdued">
+                  {" "}(from your Business Manager)
+                </Text>
+              )}
             </Text>
             {pixels.map((p) => (
               <InlineStack key={p.id} gap="200" blockAlign="center">
@@ -710,6 +875,10 @@ export default function AccountsPage() {
                 </Anim>
 
                 <Anim index={5}>
+                  <BusinessManagerSection hasUserToken={hasUserToken} />
+                </Anim>
+
+                <Anim index={6}>
                   <BlockStack gap="300">
                     <Text as="h2" variant="headingMd">
                       Ad Accounts ({adAccounts.length})

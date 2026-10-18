@@ -62,6 +62,18 @@ model MetaUserToken {
   updatedAt   DateTime @updatedAt
 }
 
+/// A connected Meta Business Manager (Business Portfolio).
+model BusinessManager {
+  id         String   @id @default(cuid())
+  shop       String
+  businessId String   // Meta business ID
+  name       String
+  isActive   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@unique([shop, businessId])
+}
+
 /// A social media post — drafted, scheduled, published, or failed.
 model ScheduledPost {
   id              String    @id @default(cuid())
