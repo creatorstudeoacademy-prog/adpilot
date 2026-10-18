@@ -17,6 +17,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { NavButton } from "../components/NavButton";
 import { Anim, Hero, PromoBanner } from "../components/ui";
+import StrategyBar from "../components/StrategyBar";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -70,6 +71,11 @@ export default function AdsDashboard() {
             subtitle="Run Facebook & Instagram ads the easy way"
           />
         </Anim>
+        {adAccounts.length > 0 && (
+          <Anim index={1}>
+            <StrategyBar />
+          </Anim>
+        )}
         {adAccounts.length === 0 ? (
           <Anim index={1}>
             <div className="ap-card-hover">

@@ -4,6 +4,7 @@ import {
   useActionData,
   useLoaderData,
   useNavigation,
+  useSearchParams,
   useSubmit,
 } from "@remix-run/react";
 import {
@@ -139,6 +140,44 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const ageMin = parseInt(String(form.get("ageMin") ?? "18"), 10) || 18;
   const ageMax = parseInt(String(form.get("ageMax") ?? "65"), 10) || 65;
 
+  // Placements: Advantage+ (default, no placement params) or manual.
+  const placementMode = String(form.get("placementMode") ?? "advantage");
+  let placementIds: string[] = [];
+  try {
+    const raw = String(form.get("placements") ?? "");
+    if (raw) placementIds = JSON.parse(raw) as string[];
+  } catch {
+    placementIds = [];
+  }
+  const placementTargeting: Record<string, unknown> = {};
+  if (placementMode === "manual" && placementIds.length > 0) {
+    const platforms = new Set<string>();
+    const fbPos = new Set<string>();
+    const igPos = new Set<string>();
+    for (const pid of placementIds) {
+      if (pid === "fb_feed") {
+        platforms.add("facebook");
+        fbPos.add("feed");
+      } else if (pid === "ig_feed") {
+        platforms.add("instagram");
+        igPos.add("stream");
+      } else if (pid === "reels") {
+        platforms.add("facebook");
+        platforms.add("instagram");
+        fbPos.add("video_feeds");
+        igPos.add("reels");
+      } else if (pid === "stories") {
+        platforms.add("facebook");
+        platforms.add("instagram");
+        fbPos.add("story");
+        igPos.add("story");
+      }
+    }
+    placementTargeting.publisher_platforms = [...platforms];
+    if (fbPos.size > 0) placementTargeting.facebook_positions = [...fbPos];
+    if (igPos.size > 0) placementTargeting.instagram_positions = [...igPos];
+  }
+
   let adSetTargeting: Record<string, unknown> | undefined;
   let audienceName: string | null = null;
   if (targetingMode === "saved" && audienceDbId) {
@@ -156,18 +195,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             geo_locations: { countries: [country] },
             age_min: ageMin,
             age_max: ageMax,
+            ...placementTargeting,
           }
         : {
             custom_audiences: [{ id: audience.metaAudienceId }],
             geo_locations: { countries: [country] },
             age_min: ageMin,
             age_max: ageMax,
+            ...placementTargeting,
           };
   } else {
     adSetTargeting = {
       geo_locations: { countries: [country] },
       age_min: ageMin,
       age_max: ageMax,
+      ...placementTargeting,
     };
   }
 
@@ -405,8 +447,9 @@ export default function CreateCampaign() {
     (d.adAccountDbId as string) ?? adAccounts[0]?.id ?? "",
   );
   const [name, setName] = useState<string>((d.name as string) ?? "");
+  const [searchParams] = useSearchParams();
   const [dailyBudget, setDailyBudget] = useState<string>(
-    d.dailyBudget != null ? String(d.dailyBudget) : "10",
+    d.dailyBudget != null ? String(d.dailyBudget) : (searchParams.get("budget") ?? "10"),
   );
   const [startDate, setStartDate] = useState<string>((d.startDate as string) ?? "");
   const [endDate, setEndDate] = useState<string>((d.endDate as string) ?? "");
@@ -429,9 +472,14 @@ export default function CreateCampaign() {
   const [audienceDbId, setAudienceDbId] = useState(
     (d.audienceDbId as string) || audiences[0]?.id || "",
   );
-  const [country, setCountry] = useState("US");
-  const [ageMin, setAgeMin] = useState("18");
-  const [ageMax, setAgeMax] = useState("65");
+  const [country, setCountry] = useState(searchParams.get("country") ?? "US");
+  const [ageMin, setAgeMin] = useState(searchParams.get("ageMin") ?? "18");
+  const [ageMax, setAgeMax] = useState(searchParams.get("ageMax") ?? "65");
+  // Placements: "advantage" (default, Meta automatic) or manual selection.
+  const [placementMode, setPlacementMode] = useState<"advantage" | "manual">("advantage");
+  const [manualPlacements, setManualPlacements] = useState<string[]>([]);
+  const togglePlacement = (id: string) =>
+    setManualPlacements((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
   const [pixelTesting, setPixelTesting] = useState(false);
   const [pixelTestMsg, setPixelTestMsg] = useState("");
   const [pixelTestOk, setPixelTestOk] = useState(false);
@@ -579,6 +627,10 @@ export default function CreateCampaign() {
     data.set("creatives", JSON.stringify(creatives));
     if (objective === "CATALOG_SALES" && productSetId) data.set("productSetId", productSetId);
     data.set("targetingMode", targetingMode);
+    data.set("placementMode", placementMode);
+    if (placementMode === "manual" && manualPlacements.length > 0) {
+      data.set("placements", JSON.stringify(manualPlacements));
+    }
     data.set("audienceDbId", audienceDbId);
     data.set("country", country);
     data.set("ageMin", ageMin);
@@ -821,6 +873,39 @@ export default function CreateCampaign() {
                     />
                   </Grid.Cell>
                 </Grid>
+                <BlockStack gap="100">
+                  <Text as="p" variant="bodyMd" fontWeight="semibold">
+                    Placements
+                  </Text>
+                  <ChoiceList
+                    title="Placement mode"
+                    titleHidden
+                    choices={[
+                      {
+                        label: "Advantage+ placements (recommended)",
+                        value: "advantage",
+                        helpText: "Meta automatically shows your ad where it performs best.",
+                      },
+                      { label: "Manual placements", value: "manual" },
+                    ]}
+                    selected={[placementMode]}
+                    onChange={(v) => setPlacementMode(v[0] as "advantage" | "manual")}
+                  />
+                  {placementMode === "manual" && (
+                    <ChoiceList
+                      title="Choose placements"
+                      allowMultiple
+                      choices={[
+                        { label: "Facebook Feed", value: "fb_feed" },
+                        { label: "Instagram Feed", value: "ig_feed" },
+                        { label: "Facebook & Instagram Reels", value: "reels" },
+                        { label: "Stories (Facebook & Instagram)", value: "stories" },
+                      ]}
+                      selected={manualPlacements}
+                      onChange={setManualPlacements}
+                    />
+                  )}
+                </BlockStack>
               </BlockStack>
               <InlineStack align="space-between">
                 <Button onClick={() => setStep(1)}>Back</Button>
