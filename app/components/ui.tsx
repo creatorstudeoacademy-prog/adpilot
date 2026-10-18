@@ -83,104 +83,134 @@ export function Anim({
 export function Footer() {
   return (
     <div style={{ marginTop: "48px" }}>
-      <Box
-        background="bg-surface-secondary"
-        borderRadius="300"
-        padding="500"
+      <div
+        className="ap-anim-up"
+        style={{
+          background: "linear-gradient(135deg, #1e1b4b 0%, #4c1d95 50%, #7c3aed 100%)",
+          borderRadius: "16px",
+          color: "#fff",
+          position: "relative",
+          overflow: "hidden",
+        }}
       >
-        <BlockStack gap="400">
-          <InlineStack align="space-between" blockAlign="start">
-            <BlockStack gap="200">
-              <InlineStack gap="200" blockAlign="center">
-                <div
-                  style={{
-                    width: "36px",
-                    height: "36px",
-                    borderRadius: "10px",
-                    background: "linear-gradient(135deg, #5c6ac4, #8b5cf6)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: "18px",
-                  }}
-                >
-                  ✈️
-                </div>
-                <Text as="p" variant="headingMd">
-                  AdPilot
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background:
+              "radial-gradient(circle at 85% 15%, rgba(255,255,255,0.15), transparent 50%)",
+            pointerEvents: "none",
+          }}
+        />
+        <Box padding="600">
+          <BlockStack gap="400">
+            <InlineStack align="space-between" blockAlign="start">
+              <BlockStack gap="200">
+                <InlineStack gap="200" blockAlign="center">
+                  <div
+                    style={{
+                      width: "40px",
+                      height: "40px",
+                      borderRadius: "12px",
+                      background: "rgba(255,255,255,0.2)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "20px",
+                    }}
+                  >
+                    ✈️
+                  </div>
+                  <Text as="p" variant="headingLg">
+                    <span style={{ color: "#fff" }}>AdPilot</span>
+                  </Text>
+                </InlineStack>
+                <Text as="p" variant="bodyMd">
+                  <span style={{ color: "rgba(255,255,255,0.75)" }}>
+                    Social media command center — schedule posts,
+                    <br />
+                    run Meta ads, all from one place.
+                  </span>
                 </Text>
-              </InlineStack>
-              <Text as="p" variant="bodySm" tone="subdued">
-                Social media command center — schedule posts,
-                <br />
-                run Meta ads, all from one place.
-              </Text>
-            </BlockStack>
-            <BlockStack gap="200">
-              <Text as="p" variant="bodyMd" fontWeight="semibold">
-                Product
-              </Text>
-              <Text as="p" variant="bodySm" tone="subdued">
-                <a href="/app/compose" style={{ color: "inherit", textDecoration: "none" }}>Compose</a>
-              </Text>
-              <Text as="p" variant="bodySm" tone="subdued">
-                <a href="/app/scheduled" style={{ color: "inherit", textDecoration: "none" }}>Scheduled</a>
-              </Text>
-              <Text as="p" variant="bodySm" tone="subdued">
-                <a href="/app/ads" style={{ color: "inherit", textDecoration: "none" }}>Ads Manager</a>
-              </Text>
-              <Text as="p" variant="bodySm" tone="subdued">
-                <a href="/app/ads/funnel" style={{ color: "inherit", textDecoration: "none" }}>Full Funnel</a>
-              </Text>
-            </BlockStack>
-            <BlockStack gap="200">
-              <Text as="p" variant="bodyMd" fontWeight="semibold">
-                Account
-              </Text>
-              <Text as="p" variant="bodySm" tone="subdued">
-                <a href="/app/wallet" style={{ color: "inherit", textDecoration: "none" }}>Wallet</a>
-              </Text>
-              <Text as="p" variant="bodySm" tone="subdued">
-                <a href="/app/billing" style={{ color: "inherit", textDecoration: "none" }}>Pricing</a>
-              </Text>
-              <Text as="p" variant="bodySm" tone="subdued">
-                <a href="/app/accounts" style={{ color: "inherit", textDecoration: "none" }}>Accounts</a>
-              </Text>
-            </BlockStack>
-            <BlockStack gap="200">
-              <Text as="p" variant="bodyMd" fontWeight="semibold">
-                Support
-              </Text>
-              <Text as="p" variant="bodySm" tone="subdued">
-                <a href="/app/support" style={{ color: "inherit", textDecoration: "none" }}>Support Chat</a>
-              </Text>
-              <Text as="p" variant="bodySm" tone="subdued">
-                <a href="/app/reviews" style={{ color: "inherit", textDecoration: "none" }}>Reviews</a>
-              </Text>
-            </BlockStack>
-          </InlineStack>
-          <div
-            style={{
-              borderTop: "1px solid #e1e3e5",
-              paddingTop: "16px",
-            }}
-          >
-            <InlineStack align="space-between" blockAlign="center">
-              <Text as="p" variant="bodySm" tone="subdued">
-                © 2026 AdPilot by Creator Studio. All rights reserved.
-              </Text>
-              <InlineStack gap="300">
-                <Text as="p" variant="bodySm" tone="subdued">
-                  <a href="/privacy" style={{ color: "inherit", textDecoration: "none" }}>Privacy</a>
+              </BlockStack>
+              <BlockStack gap="200">
+                <Text as="p" variant="bodyMd" fontWeight="semibold">
+                  <span style={{ color: "#fff" }}>Product</span>
                 </Text>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  <a href="/terms" style={{ color: "inherit", textDecoration: "none" }}>Terms</a>
+                {[
+                  ["Compose", "/app/compose"],
+                  ["Scheduled", "/app/scheduled"],
+                  ["Ads Manager", "/app/ads"],
+                  ["Full Funnel", "/app/ads/funnel"],
+                ].map(([label, href]) => (
+                  <Text key={href} as="p" variant="bodySm">
+                    <a href={href} style={{ color: "rgba(255,255,255,0.7)", textDecoration: "none" }}>
+                      {label}
+                    </a>
+                  </Text>
+                ))}
+              </BlockStack>
+              <BlockStack gap="200">
+                <Text as="p" variant="bodyMd" fontWeight="semibold">
+                  <span style={{ color: "#fff" }}>Account</span>
                 </Text>
-              </InlineStack>
+                {[
+                  ["Wallet", "/app/wallet"],
+                  ["Pricing", "/app/billing"],
+                  ["Accounts", "/app/accounts"],
+                ].map(([label, href]) => (
+                  <Text key={href} as="p" variant="bodySm">
+                    <a href={href} style={{ color: "rgba(255,255,255,0.7)", textDecoration: "none" }}>
+                      {label}
+                    </a>
+                  </Text>
+                ))}
+              </BlockStack>
+              <BlockStack gap="200">
+                <Text as="p" variant="bodyMd" fontWeight="semibold">
+                  <span style={{ color: "#fff" }}>Support</span>
+                </Text>
+                {[
+                  ["Support Chat", "/app/support"],
+                  ["Reviews", "/app/reviews"],
+                ].map(([label, href]) => (
+                  <Text key={href} as="p" variant="bodySm">
+                    <a href={href} style={{ color: "rgba(255,255,255,0.7)", textDecoration: "none" }}>
+                      {label}
+                    </a>
+                  </Text>
+                ))}
+              </BlockStack>
             </InlineStack>
-          </div>
-        </BlockStack>
-      </Box>
+            <div
+              style={{
+                borderTop: "1px solid rgba(255,255,255,0.2)",
+                paddingTop: "16px",
+              }}
+            >
+              <InlineStack align="space-between" blockAlign="center">
+                <Text as="p" variant="bodySm">
+                  <span style={{ color: "rgba(255,255,255,0.6)" }}>
+                    © 2026 AdPilot by Creator Studio. All rights reserved.
+                  </span>
+                </Text>
+                <InlineStack gap="300">
+                  <Text as="p" variant="bodySm">
+                    <a href="/privacy" style={{ color: "rgba(255,255,255,0.6)", textDecoration: "none" }}>
+                      Privacy
+                    </a>
+                  </Text>
+                  <Text as="p" variant="bodySm">
+                    <a href="/terms" style={{ color: "rgba(255,255,255,0.6)", textDecoration: "none" }}>
+                      Terms
+                    </a>
+                  </Text>
+                </InlineStack>
+              </InlineStack>
+            </div>
+          </BlockStack>
+        </Box>
+      </div>
     </div>
   );
 }

@@ -1134,8 +1134,8 @@ export default function AdminControlPanel() {
                 <Text as="h3" variant="headingSm">
                   Generate new coupon
                 </Text>
-                <Grid columns={{ xs: 1, md: 3 }}>
-                  <Grid.Cell>
+                <Grid>
+                  <Grid.Cell columnSpan={{ xs: 6, sm: 6, md: 4, lg: 4, xl: 4 }}>
                     <TextField
                       label="Code"
                       value={newCode}
@@ -1145,7 +1145,7 @@ export default function AdminControlPanel() {
                       helpText="A-Z and 0-9 only, min 4 chars"
                     />
                   </Grid.Cell>
-                  <Grid.Cell>
+                  <Grid.Cell columnSpan={{ xs: 3, sm: 3, md: 4, lg: 4, xl: 4 }}>
                     <TextField
                       label="Bonus %"
                       type="number"
@@ -1153,9 +1153,10 @@ export default function AdminControlPanel() {
                       onChange={setNewBonus}
                       autoComplete="off"
                       suffix="%"
+                      placeholder="10"
                     />
                   </Grid.Cell>
-                  <Grid.Cell>
+                  <Grid.Cell columnSpan={{ xs: 3, sm: 3, md: 4, lg: 4, xl: 4 }}>
                     <TextField
                       label="Valid for (days)"
                       type="number"
@@ -1163,6 +1164,7 @@ export default function AdminControlPanel() {
                       onChange={setNewDays}
                       autoComplete="off"
                       suffix="days"
+                      placeholder="30"
                     />
                   </Grid.Cell>
                 </Grid>
