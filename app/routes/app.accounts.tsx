@@ -28,6 +28,7 @@ import prisma from "../db.server";
 import { createMetaConnectParams } from "../lib/meta-oauth.server";
 import { NavButton } from "../components/NavButton";
 import { listAdAccounts } from "../lib/meta-ads.server";
+import { Anim, Hero } from "../components/ui";
 
 const GRAPH_VERSION = "v21.0";
 
@@ -266,36 +267,38 @@ function AccountCard({
   onDisconnect: () => void;
 }) {
   return (
-    <Card>
-      <InlineStack align="space-between" blockAlign="center">
-        <BlockStack gap="100">
-          <InlineStack gap="200" blockAlign="center">
-            <Text as="h2" variant="headingMd">
-              {title}
+    <div className="ap-card-hover">
+      <Card>
+        <InlineStack align="space-between" blockAlign="center">
+          <BlockStack gap="100">
+            <InlineStack gap="200" blockAlign="center">
+              <Text as="h2" variant="headingMd">
+                {title}
+              </Text>
+              <Badge tone="success">Connected</Badge>
+            </InlineStack>
+            <Text as="p" variant="bodySm" tone="subdued">
+              {subtitle}
             </Text>
-            <Badge tone="success">Connected</Badge>
-          </InlineStack>
-          <Text as="p" variant="bodySm" tone="subdued">
-            {subtitle}
-          </Text>
-          <Text as="p" variant="bodySm" tone="subdued">
-            Connected {new Date(connectedAt).toLocaleDateString()}
-            {stats ? ` · ${stats}` : ""}
-          </Text>
-        </BlockStack>
-        <Button
-          tone="critical"
-          disabled={busy}
-          onClick={() => {
-            if (window.confirm(`Disconnect "${title}"? You can reconnect anytime.`)) {
-              onDisconnect();
-            }
-          }}
-        >
-          Disconnect
-        </Button>
-      </InlineStack>
-    </Card>
+            <Text as="p" variant="bodySm" tone="subdued">
+              Connected {new Date(connectedAt).toLocaleDateString()}
+              {stats ? ` · ${stats}` : ""}
+            </Text>
+          </BlockStack>
+          <Button
+            tone="critical"
+            disabled={busy}
+            onClick={() => {
+              if (window.confirm(`Disconnect "${title}"? You can reconnect anytime.`)) {
+                onDisconnect();
+              }
+            }}
+          >
+            Disconnect
+          </Button>
+        </InlineStack>
+      </Card>
+    </div>
   );
 }
 
@@ -344,12 +347,13 @@ function PixelCard({
     }
   };
   return (
-    <Card>
-      <BlockStack gap="200">
-        <InlineStack gap="200" blockAlign="center">
-          <Text as="h3" variant="headingSm">
-            Meta Pixel
-          </Text>
+    <div className="ap-card-hover">
+      <Card>
+        <BlockStack gap="200">
+          <InlineStack gap="200" blockAlign="center">
+            <Text as="h3" variant="headingSm">
+              Meta Pixel
+            </Text>
           <div style={{ marginLeft: "auto" }}>
             <Button
               size="slim"
@@ -419,6 +423,7 @@ function PixelCard({
         )}
       </BlockStack>
     </Card>
+    </div>
   );
 }
 
@@ -433,12 +438,13 @@ function ManualTokenForm({ busy }: { busy: boolean }) {
     submit(data, { method: "post" });
   };
   return (
-    <Card>
-      <BlockStack gap="200">
-        <InlineStack gap="200" blockAlign="center">
-          <Text as="h3" variant="headingSm">
-            Or paste a User Token manually
-          </Text>
+    <div className="ap-card-hover">
+      <Card>
+        <BlockStack gap="200">
+          <InlineStack gap="200" blockAlign="center">
+            <Text as="h3" variant="headingSm">
+              Or paste a User Token manually
+            </Text>
           <Button variant="plain" onClick={() => setShow(!show)}>
             {show ? "Hide" : "Show"}
           </Button>
@@ -476,6 +482,7 @@ function ManualTokenForm({ busy }: { busy: boolean }) {
         )}
       </BlockStack>
     </Card>
+    </div>
   );
 }
 
@@ -531,179 +538,205 @@ export default function AccountsPage() {
       subtitle="Manage every Meta connection in one place"
     >
       <BlockStack gap="500">
+        <Anim index={0}>
+          <Hero
+            title="Connected Accounts"
+            subtitle="Manage every Meta connection in one place"
+          />
+        </Anim>
         {actionData && "ok" in actionData && actionData.ok && (
-          <Banner tone="success" onDismiss={() => {}}>
-            {String(actionData.message ?? "Account disconnected.")}
-          </Banner>
+          <Anim index={1}>
+            <Banner tone="success" onDismiss={() => {}}>
+              {String(actionData.message ?? "Account disconnected.")}
+            </Banner>
+          </Anim>
         )}
 
         {!metaConfigured && (
-          <Banner tone="warning" title="Meta app not configured">
-            The Meta app credentials (META_APP_ID / META_APP_SECRET) are not
-            set yet. Add them to the app's environment variables to enable
-            Facebook connect.
-          </Banner>
+          <Anim index={1}>
+            <Banner tone="warning" title="Meta app not configured">
+              The Meta app credentials (META_APP_ID / META_APP_SECRET) are not
+              set yet. Add them to the app's environment variables to enable
+              Facebook connect.
+            </Banner>
+          </Anim>
         )}
 
         {fbConnected && !hasUserToken && (
-          <Banner
-            tone="warning"
-            title="Reconnect Facebook to enable ad accounts"
-          >
-            <BlockStack gap="200">
-              <Text as="p">
-                Your pages were connected before ad account support was added.
-                Reconnect Facebook once to enable ad account discovery — your
-                pages will stay connected.
-              </Text>
-              <InlineStack>
-                <Button
-                  variant="primary"
-                  url={metaConnectUrl}
-                  target="_blank"
-                >
-                  Reconnect Facebook
-                </Button>
-              </InlineStack>
-            </BlockStack>
-          </Banner>
+          <Anim index={1}>
+            <Banner
+              tone="warning"
+              title="Reconnect Facebook to enable ad accounts"
+            >
+              <BlockStack gap="200">
+                <Text as="p">
+                  Your pages were connected before ad account support was added.
+                  Reconnect Facebook once to enable ad account discovery — your
+                  pages will stay connected.
+                </Text>
+                <InlineStack>
+                  <Button
+                    variant="primary"
+                    url={metaConnectUrl}
+                    target="_blank"
+                  >
+                    Reconnect Facebook
+                  </Button>
+                </InlineStack>
+              </BlockStack>
+            </Banner>
+          </Anim>
         )}
 
-        <Card>
-          <InlineStack gap="300">
-            {metaConfigured &&
-              (fbConnected ? (
-                <Button tone="critical" onClick={disconnectAllSocial} disabled={busy}>
-                  Disconnect Facebook
-                </Button>
-              ) : (
-                <Button
-                  variant="primary"
-                  url={metaConnectUrl}
-                  target="_blank"
-                >
-                  Connect Facebook
-                </Button>
-              ))}
-            <NavButton url="/app/ads/connect">Connect Ad Account</NavButton>
-          </InlineStack>
-          <div style={{ marginTop: 12 }}>
-            <Text as="p" variant="bodySm" tone="subdued">
-              Connect Facebook connects your Pages (Instagram Business accounts
-              linked to a Page come along automatically).
-            </Text>
+        <Anim index={2}>
+          <div className="ap-card-hover">
+            <Card>
+              <InlineStack gap="300">
+                {metaConfigured &&
+                  (fbConnected ? (
+                    <Button tone="critical" onClick={disconnectAllSocial} disabled={busy}>
+                      Disconnect Facebook
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="primary"
+                      url={metaConnectUrl}
+                      target="_blank"
+                    >
+                      Connect Facebook
+                    </Button>
+                  ))}
+                <NavButton url="/app/ads/connect">Connect Ad Account</NavButton>
+              </InlineStack>
+              <div style={{ marginTop: 12 }}>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Connect Facebook connects your Pages (Instagram Business accounts
+                  linked to a Page come along automatically).
+                </Text>
+              </div>
+              {!fbConnected && (
+                <div style={{ marginTop: 16 }}>
+                  <ManualTokenForm busy={busy} />
+                </div>
+              )}
+            </Card>
           </div>
-          {!fbConnected && (
-            <div style={{ marginTop: 16 }}>
-              <ManualTokenForm busy={busy} />
-            </div>
-          )}
-        </Card>
+        </Anim>
 
         {totalConnected === 0 ? (
-          <Card>
-            <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">
-                No accounts connected yet
-              </Text>
-              <Text as="p" variant="bodyMd" tone="subdued">
-                Connect your Facebook Page to publish posts and reels, and
-                connect an ad account to run campaigns and build audiences.
-              </Text>
-            </BlockStack>
-          </Card>
+          <Anim index={3}>
+            <div className="ap-card-hover">
+              <Card>
+                <BlockStack gap="400">
+                  <Text as="h2" variant="headingMd">
+                    No accounts connected yet
+                  </Text>
+                  <Text as="p" variant="bodyMd" tone="subdued">
+                    Connect your Facebook Page to publish posts and reels, and
+                    connect an ad account to run campaigns and build audiences.
+                  </Text>
+                </BlockStack>
+              </Card>
+            </div>
+          </Anim>
         ) : (
           <Layout>
             <Layout.Section>
               <BlockStack gap="500">
-                <BlockStack gap="300">
-                  <Text as="h2" variant="headingMd">
-                    Facebook Pages ({pages.length})
-                  </Text>
-                  {pages.length === 0 ? (
-                    <Text as="p" tone="subdued">
-                      No Pages connected.
+                <Anim index={3}>
+                  <BlockStack gap="300">
+                    <Text as="h2" variant="headingMd">
+                      Facebook Pages ({pages.length})
                     </Text>
-                  ) : (
-                    pages.map((p) => (
-                      <AccountCard
-                        key={p.id}
-                        title={p.pageName}
-                        subtitle={`Facebook Page · ${p.pageId}`}
-                        stats={
-                          p.followers != null
-                            ? `${p.followers.toLocaleString()} followers`
-                            : undefined
-                        }
-                        connectedAt={p.createdAt}
-                        busy={busy}
-                        onDisconnect={() => disconnectSocial(p.id)}
-                      />
-                    ))
-                  )}
-                </BlockStack>
-
-                <BlockStack gap="300">
-                  <Text as="h2" variant="headingMd">
-                    Instagram Accounts ({instagrams.length})
-                  </Text>
-                  {instagrams.length === 0 ? (
-                    <Text as="p" tone="subdued">
-                      No Instagram accounts connected. Link an Instagram Business
-                      account to a Facebook Page to connect it.
-                    </Text>
-                  ) : (
-                    instagrams.map((a) => (
-                      <AccountCard
-                        key={a.id}
-                        title={a.pageName}
-                        subtitle={`Instagram · ${a.instagramId ?? ""}`}
-                        connectedAt={a.createdAt}
-                        busy={busy}
-                        onDisconnect={() => disconnectSocial(a.id)}
-                      />
-                    ))
-                  )}
-                </BlockStack>
-
-                <BlockStack gap="300">
-                  <Text as="h2" variant="headingMd">
-                    Ad Accounts ({adAccounts.length})
-                  </Text>
-                  {adAccounts.length === 0 ? (
-                    <Text as="p" tone="subdued">
-                      No ad accounts connected.
-                    </Text>
-                  ) : (
-                    adAccounts.map((a) => (
-                      <BlockStack key={a.id} gap="200">
+                    {pages.length === 0 ? (
+                      <Text as="p" tone="subdued">
+                        No Pages connected.
+                      </Text>
+                    ) : (
+                      pages.map((p) => (
                         <AccountCard
-                          title={a.adAccountName}
-                          subtitle={`Ad account ${a.adAccountId} · ${a.currency}`}
+                          key={p.id}
+                          title={p.pageName}
+                          subtitle={`Facebook Page · ${p.pageId}`}
                           stats={
-                            a.spend30d != null
-                              ? `$${a.spend30d.toFixed(2)} spend (30d)`
+                            p.followers != null
+                              ? `${p.followers.toLocaleString()} followers`
                               : undefined
                           }
+                          connectedAt={p.createdAt}
+                          busy={busy}
+                          onDisconnect={() => disconnectSocial(p.id)}
+                        />
+                      ))
+                    )}
+                  </BlockStack>
+                </Anim>
+
+                <Anim index={4}>
+                  <BlockStack gap="300">
+                    <Text as="h2" variant="headingMd">
+                      Instagram Accounts ({instagrams.length})
+                    </Text>
+                    {instagrams.length === 0 ? (
+                      <Text as="p" tone="subdued">
+                        No Instagram accounts connected. Link an Instagram Business
+                        account to a Facebook Page to connect it.
+                      </Text>
+                    ) : (
+                      instagrams.map((a) => (
+                        <AccountCard
+                          key={a.id}
+                          title={a.pageName}
+                          subtitle={`Instagram · ${a.instagramId ?? ""}`}
                           connectedAt={a.createdAt}
                           busy={busy}
-                          onDisconnect={() => disconnectAd(a.id)}
+                          onDisconnect={() => disconnectSocial(a.id)}
                         />
-                        <PixelCard
-                          adAccountId={a.id}
-                          currentPixelId={a.pixelId}
-                          busy={busy}
-                        />
-                      </BlockStack>
-                    ))
-                  )}
-                  {/* Inline ad account discovery — connect without leaving this page */}
-                  {hasUserToken && availableAdAccounts.length > 0 && (
-                    <Card>
-                      <BlockStack gap="300">
-                        <Text as="h2" variant="headingMd">
-                          Available ad accounts
-                        </Text>
+                      ))
+                    )}
+                  </BlockStack>
+                </Anim>
+
+                <Anim index={5}>
+                  <BlockStack gap="300">
+                    <Text as="h2" variant="headingMd">
+                      Ad Accounts ({adAccounts.length})
+                    </Text>
+                    {adAccounts.length === 0 ? (
+                      <Text as="p" tone="subdued">
+                        No ad accounts connected.
+                      </Text>
+                    ) : (
+                      adAccounts.map((a) => (
+                        <BlockStack key={a.id} gap="200">
+                          <AccountCard
+                            title={a.adAccountName}
+                            subtitle={`Ad account ${a.adAccountId} · ${a.currency}`}
+                            stats={
+                              a.spend30d != null
+                                ? `$${a.spend30d.toFixed(2)} spend (30d)`
+                                : undefined
+                            }
+                            connectedAt={a.createdAt}
+                            busy={busy}
+                            onDisconnect={() => disconnectAd(a.id)}
+                          />
+                          <PixelCard
+                            adAccountId={a.id}
+                            currentPixelId={a.pixelId}
+                            busy={busy}
+                          />
+                        </BlockStack>
+                      ))
+                    )}
+                    {/* Inline ad account discovery — connect without leaving this page */}
+                    {hasUserToken && availableAdAccounts.length > 0 && (
+                      <div className="ap-card-hover">
+                        <Card>
+                          <BlockStack gap="300">
+                            <Text as="h2" variant="headingMd">
+                              Available ad accounts
+                            </Text>
                         {availableAdAccounts.map((a) => (
                           <InlineStack
                             key={a.id}
@@ -731,32 +764,40 @@ export default function AccountsPage() {
                           </InlineStack>
                         ))}
                       </BlockStack>
-                    </Card>
-                  )}
-                  {hasUserToken && adAccountsError && (
-                    <Banner tone="warning">{adAccountsError}</Banner>
-                  )}
-                </BlockStack>
+                        </Card>
+                      </div>
+                    )}
+                    {hasUserToken && adAccountsError && (
+                      <Anim index={1}>
+                        <Banner tone="warning">{adAccountsError}</Banner>
+                      </Anim>
+                    )}
+                  </BlockStack>
+                </Anim>
               </BlockStack>
             </Layout.Section>
 
             <Layout.Section variant="oneThird">
-              <Card>
-                <BlockStack gap="300">
-                  <Text as="h2" variant="headingMd">
-                    What you get
-                  </Text>
-                  <Text as="p" variant="bodyMd">
-                    Pages unlock social posting (posts, reels, video). Ad
-                    accounts unlock the Ads Manager, full-funnel campaigns and
-                    the Audience Manager.
-                  </Text>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Disconnecting removes the account from AdPilot. You can
-                    reconnect anytime.
-                  </Text>
-                </BlockStack>
-              </Card>
+              <Anim index={4}>
+                <div className="ap-card-hover">
+                  <Card>
+                    <BlockStack gap="300">
+                      <Text as="h2" variant="headingMd">
+                        What you get
+                      </Text>
+                      <Text as="p" variant="bodyMd">
+                        Pages unlock social posting (posts, reels, video). Ad
+                        accounts unlock the Ads Manager, full-funnel campaigns and
+                        the Audience Manager.
+                      </Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Disconnecting removes the account from AdPilot. You can
+                        reconnect anytime.
+                      </Text>
+                    </BlockStack>
+                  </Card>
+                </div>
+              </Anim>
             </Layout.Section>
           </Layout>
         )}
