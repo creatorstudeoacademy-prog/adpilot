@@ -142,33 +142,34 @@ export default function SupportChat() {
                   {error}
                 </Text>
               )}
-              <InlineStack gap="200" blockAlign="end">
-                <div style={{ flex: 1 }}>
-                  <TextField
-                    label="Message"
-                    labelHidden
-                    value={input}
-                    onChange={setInput}
-                    placeholder="e.g. How do I connect my Facebook Page?"
-                    autoComplete="off"
-                    disabled={sending}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        void send();
-                      }
-                    }}
-                  />
-                </div>
-                <Button
-                  variant="primary"
-                  onClick={() => void send()}
-                  loading={sending}
-                  disabled={!input.trim()}
-                >
-                  Send
-                </Button>
-              </InlineStack>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void send();
+                }}
+              >
+                <InlineStack gap="200" blockAlign="end">
+                  <div style={{ flex: 1 }}>
+                    <TextField
+                      label="Message"
+                      labelHidden
+                      value={input}
+                      onChange={setInput}
+                      placeholder="e.g. How do I connect my Facebook Page?"
+                      autoComplete="off"
+                      disabled={sending}
+                    />
+                  </div>
+                  <Button
+                    variant="primary"
+                    submit
+                    loading={sending}
+                    disabled={!input.trim()}
+                  >
+                    Send
+                  </Button>
+                </InlineStack>
+              </form>
               <Text as="p" variant="bodySm" tone="subdued">
                 For account-specific help: support@creatorstudioacademy.com
               </Text>

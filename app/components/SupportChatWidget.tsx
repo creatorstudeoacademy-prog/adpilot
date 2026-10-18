@@ -219,33 +219,34 @@ export function SupportChatWidget() {
                 </Text>
               </div>
             )}
-            <div style={{ display: "flex", gap: "8px", alignItems: "flex-end" }}>
-              <div style={{ flex: 1 }}>
-                <TextField
-                  label="Message"
-                  labelHidden
-                  value={input}
-                  onChange={setInput}
-                  placeholder="Type your message…"
-                  autoComplete="off"
-                  disabled={sending}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      void send();
-                    }
-                  }}
-                />
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void send();
+              }}
+            >
+              <div style={{ display: "flex", gap: "8px", alignItems: "flex-end" }}>
+                <div style={{ flex: 1 }}>
+                  <TextField
+                    label="Message"
+                    labelHidden
+                    value={input}
+                    onChange={setInput}
+                    placeholder="Type your message…"
+                    autoComplete="off"
+                    disabled={sending}
+                  />
+                </div>
+                <Button
+                  variant="primary"
+                  submit
+                  loading={sending}
+                  disabled={!input.trim()}
+                >
+                  Send
+                </Button>
               </div>
-              <Button
-                variant="primary"
-                onClick={() => void send()}
-                loading={sending}
-                disabled={!input.trim()}
-              >
-                Send
-              </Button>
-            </div>
+            </form>
           </div>
         </div>
       )}
