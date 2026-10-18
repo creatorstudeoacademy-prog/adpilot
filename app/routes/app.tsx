@@ -8,6 +8,7 @@ import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 
 import { authenticate } from "../shopify.server";
 import { SupportChatWidget } from "../components/SupportChatWidget";
+import { Footer } from "../components/ui";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
@@ -56,6 +57,9 @@ export default function App() {
         )}
       </NavMenu>
       <Outlet />
+      <div style={{ padding: "0 24px 24px" }}>
+        <Footer />
+      </div>
       <SupportChatWidget />
     </AppProvider>
   );
