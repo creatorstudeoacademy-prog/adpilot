@@ -77,7 +77,7 @@ model ScheduledPost {
   publishedAt     DateTime?
   error           String?
   createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  updatedAt       DateTime? @updatedAt // nullable so db push can backfill existing rows
   schedulePackageId String? // which auto-schedule package this post came from (null = manual)
   lifetimePackageId String? // lifetime auto-post package that generated this post (null = not lifetime)
 }
