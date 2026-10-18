@@ -138,3 +138,15 @@ export function lifetimeFee(postsPerDay: number): number {
   const n = Math.max(1, Math.min(LIFETIME_MAX_POSTS_PER_DAY, Math.floor(postsPerDay)));
   return Math.round(n * LIFETIME_BILLING_DAYS * TEXT_POST_FEE * (1 - LIFETIME_DISCOUNT) * 100) / 100;
 }
+
+/** Lifetime pack tiers (posts/day). */
+export interface LifetimePackDef {
+  id: string;
+  postsPerDay: number;
+  label: string;
+}
+export const LIFETIME_PACKS: LifetimePackDef[] = [
+  { id: "lt-starter", postsPerDay: 3, label: "Starter" },
+  { id: "lt-growth", postsPerDay: 5, label: "Growth" },
+  { id: "lt-pro", postsPerDay: 10, label: "Pro" },
+];

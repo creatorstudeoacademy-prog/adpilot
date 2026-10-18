@@ -22,6 +22,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import {
   LIFETIME_MAX_POSTS_PER_DAY,
+  LIFETIME_PACKS,
   PHOTO_POST_FEE,
   SCHEDULE_PACKAGES,
   TEXT_POST_FEE,
@@ -101,7 +102,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           endsAt: lifetime.endsAt.toISOString(),
         }
       : null,
-    lifetimeMax: LIFETIME_MAX_POSTS_PER_DAY,
+    lifetimePacks: LIFETIME_PACKS.map((p) => ({
+      id: p.id,
+      label: p.label,
+      postsPerDay: p.postsPerDay,
+      fee: lifetimeFee(p.postsPerDay),
+    })),
     fees: {
       text: TEXT_POST_FEE,
       photo: PHOTO_POST_FEE,
@@ -116,7 +122,7 @@ function formatDate(iso: string | null) {
 }
 
 export default function ScheduledPage() {
-  const { posts, activePackage, packages, fees, boughtPackages, lifetime, lifetimeMax } =
+  const { posts, activePackage, packages, fees, boughtPackages, lifetime, lifetimePacks } =
     useLoaderData<typeof loader>();
   const revalidator = useRevalidator();
   const [buyError, setBuyError] = useState<string | null>(null);
@@ -126,17 +132,17 @@ export default function ScheduledPage() {
   const [editTime, setEditTime] = useState("09:00");
   const [rowBusy, setRowBusy] = useState<string | null>(null);
   const [pkgFilter, setPkgFilter] = useState<string>("all");
-  const [ltPosts, setLtPosts] = useState("3");
   const [ltBusy, setLtBusy] = useState(false);
+  const [ltPack, setLtPack] = useState<string | null>(null);
 
-  const lifetimeAction = async (action: string) => {
+  const lifetimeAction = async (action: string, packId?: string) => {
     setBuyError(null);
     setLtBusy(true);
     try {
       const res = await fetch("/api/schedule/lifetime", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, postsPerDay: Number(ltPosts) }),
+        body: JSON.stringify({ action, packId }),
       });
       const data = (await res.json()) as { ok: boolean; message?: string };
       if (data.ok) {
@@ -313,8 +319,8 @@ export default function ScheduledPage() {
                 )}
               </InlineStack>
               <Text as="p" variant="bodyMd" tone="subdued">
-                Up to {lifetimeMax} posts/day · billed per 3 months upfront (10% off) ·
-                3-month minimum term · auto-renews unless turned off
+                Billed per 3 months upfront (10% off) · 3-month minimum term ·
+                auto-renews unless turned off
               </Text>
               {lifetime ? (
                 <BlockStack gap="200">
@@ -354,32 +360,47 @@ export default function ScheduledPage() {
                   </InlineStack>
                 </BlockStack>
               ) : (
-                <BlockStack gap="200">
-                  <InlineStack gap="200" blockAlign="end">
-                    <div style={{ minWidth: "160px" }}>
-                      <Select
-                        label="Posts per day"
-                        options={Array.from({ length: lifetimeMax }, (_, i) => ({
-                          label: `${i + 1} post${i > 0 ? "s" : ""}/day`,
-                          value: String(i + 1),
-                        }))}
-                        value={ltPosts}
-                        onChange={setLtPosts}
-                      />
-                    </div>
-                    <Text as="p" variant="headingMd">
-                      ${lifetimeFee(Number(ltPosts)).toFixed(2)} / 3 months
-                    </Text>
-                  </InlineStack>
-                  <InlineStack>
-                    <Button
-                      variant="primary"
-                      loading={ltBusy}
-                      onClick={() => void lifetimeAction("activate")}
-                    >
-                      Activate lifetime
-                    </Button>
-                  </InlineStack>
+                <BlockStack gap="300">
+                  <Grid>
+                    {lifetimePacks.map((p, idx) => (
+                      <Grid.Cell
+                        key={p.id}
+                        columnSpan={{ xs: 6, sm: 2, md: 2, lg: 4, xl: 4 }}
+                      >
+                        <Card>
+                          <Box padding="400">
+                            <BlockStack gap="200">
+                              <InlineStack align="space-between" blockAlign="center">
+                                <Text as="h3" variant="headingMd">
+                                  {p.label}
+                                </Text>
+                                {idx === lifetimePacks.length - 1 && (
+                                  <Badge tone="success">Best value</Badge>
+                                )}
+                              </InlineStack>
+                              <Text as="p" variant="heading2xl">
+                                ${p.fee.toFixed(2)}
+                              </Text>
+                              <Text as="p" variant="bodySm" tone="subdued">
+                                {p.postsPerDay} posts/day · 3 months
+                              </Text>
+                              <Button
+                                variant="primary"
+                                loading={ltBusy && ltPack === p.id}
+                                disabled={ltBusy}
+                                onClick={() => {
+                                  setLtPack(p.id);
+                                  void lifetimeAction("activate", p.id);
+                                }}
+                              >
+                                Activate
+                              </Button>
+                            </BlockStack>
+                          </Box>
+                        </Card>
+                      </Grid.Cell>
+                    ))}
+                  </Grid>
                   <Text as="p" variant="bodySm" tone="subdued">
                     Charged upfront for 3 months. Locked for the first 3 months —
                     then auto-renews every 3 months unless you turn it off.

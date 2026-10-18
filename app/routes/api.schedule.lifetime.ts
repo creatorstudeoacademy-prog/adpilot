@@ -7,6 +7,7 @@ import { deduct, getWallet, isFreeShop } from "../lib/wallet.server";
 import {
   LIFETIME_BILLING_DAYS,
   LIFETIME_MAX_POSTS_PER_DAY,
+  LIFETIME_PACKS,
   lifetimeFee,
 } from "../lib/pricing";
 import { logActivity } from "../lib/activity.server";
@@ -23,7 +24,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  let body: { action?: unknown; postsPerDay?: unknown } = {};
+  let body: { action?: unknown; postsPerDay?: unknown; packId?: unknown } = {};
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -43,10 +44,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         { status: 400 },
       );
     }
-    const postsPerDay = Math.max(
-      1,
-      Math.min(LIFETIME_MAX_POSTS_PER_DAY, Math.floor(Number(body.postsPerDay) || 1)),
-    );
+    const pack = LIFETIME_PACKS.find((p) => p.id === String(body.packId ?? ""));
+    const postsPerDay = pack
+      ? pack.postsPerDay
+      : Math.max(1, Math.min(LIFETIME_MAX_POSTS_PER_DAY, Math.floor(Number(body.postsPerDay) || 1)));
     const fee = lifetimeFee(postsPerDay);
 
     const wallet = await getWallet(shop);
