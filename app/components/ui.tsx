@@ -1,4 +1,5 @@
 import { BlockStack, Box, InlineStack, Text } from "@shopify/polaris";
+import { Link } from "@remix-run/react";
 import type { ReactNode } from "react";
 
 /** Animated gradient hero banner. */
@@ -144,9 +145,9 @@ export function Footer() {
                   ["Full Funnel", "/app/ads/funnel"],
                 ].map(([label, href]) => (
                   <Text key={href} as="p" variant="bodySm">
-                    <a href={href} style={{ color: "rgba(255,255,255,0.7)", textDecoration: "none" }}>
+                    <Link to={href} style={{ color: "rgba(255,255,255,0.7)", textDecoration: "none" }}>
                       {label}
-                    </a>
+                    </Link>
                   </Text>
                 ))}
               </BlockStack>
@@ -160,9 +161,9 @@ export function Footer() {
                   ["Accounts", "/app/accounts"],
                 ].map(([label, href]) => (
                   <Text key={href} as="p" variant="bodySm">
-                    <a href={href} style={{ color: "rgba(255,255,255,0.7)", textDecoration: "none" }}>
+                    <Link to={href} style={{ color: "rgba(255,255,255,0.7)", textDecoration: "none" }}>
                       {label}
-                    </a>
+                    </Link>
                   </Text>
                 ))}
               </BlockStack>
@@ -175,9 +176,9 @@ export function Footer() {
                   ["Reviews", "/app/reviews"],
                 ].map(([label, href]) => (
                   <Text key={href} as="p" variant="bodySm">
-                    <a href={href} style={{ color: "rgba(255,255,255,0.7)", textDecoration: "none" }}>
+                    <Link to={href} style={{ color: "rgba(255,255,255,0.7)", textDecoration: "none" }}>
                       {label}
-                    </a>
+                    </Link>
                   </Text>
                 ))}
               </BlockStack>
@@ -196,14 +197,14 @@ export function Footer() {
                 </Text>
                 <InlineStack gap="300">
                   <Text as="p" variant="bodySm">
-                    <a href="/privacy" style={{ color: "rgba(255,255,255,0.6)", textDecoration: "none" }}>
+                    <Link to="/privacy" style={{ color: "rgba(255,255,255,0.6)", textDecoration: "none" }}>
                       Privacy
-                    </a>
+                    </Link>
                   </Text>
                   <Text as="p" variant="bodySm">
-                    <a href="/terms" style={{ color: "rgba(255,255,255,0.6)", textDecoration: "none" }}>
+                    <Link to="/terms" style={{ color: "rgba(255,255,255,0.6)", textDecoration: "none" }}>
                       Terms
-                    </a>
+                    </Link>
                   </Text>
                 </InlineStack>
               </InlineStack>
