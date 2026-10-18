@@ -16,6 +16,7 @@ import {
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { NavButton } from "../components/NavButton";
+import { Anim, Hero, PromoBanner } from "../components/ui";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -63,8 +64,16 @@ export default function AdsDashboard() {
       }
     >
       <BlockStack gap="500">
+        <Anim index={0}>
+          <Hero
+            title="Ads Manager"
+            subtitle="Run Facebook & Instagram ads the easy way"
+          />
+        </Anim>
         {adAccounts.length === 0 ? (
-          <Card>
+          <Anim index={1}>
+            <div className="ap-card-hover">
+              <Card>
             <BlockStack gap="400">
               <Text as="h2" variant="headingMd">
                 Connect your ad account
@@ -80,78 +89,103 @@ export default function AdsDashboard() {
                 </NavButton>
               </InlineStack>
             </BlockStack>
-          </Card>
+              </Card>
+            </div>
+          </Anim>
         ) : (
           <>
+            <Anim index={1}>
+              <PromoBanner
+                icon="🚀"
+                title="Try the Full-Funnel Campaign"
+                description="One click — 3 campaigns, 3 audiences, full funnel live."
+              />
+            </Anim>
             <Layout>
               <Layout.Section>
                 <Grid>
                   <Grid.Cell columnSpan={{ xs: 6, sm: 2, md: 2, lg: 4, xl: 4 }}>
-                    <Card>
-                      <BlockStack gap="200">
-                        <Text as="p" variant="bodyMd" tone="subdued">
-                          Active campaigns
-                        </Text>
-                        <Text as="p" variant="headingXl">
-                          {activeCount}
-                        </Text>
-                      </BlockStack>
-                    </Card>
+                    <Anim index={2}>
+                      <div className="ap-stat-card">
+                        <Card>
+                          <BlockStack gap="200">
+                            <Text as="p" variant="bodyMd" tone="subdued">
+                              Active campaigns
+                            </Text>
+                            <Text as="p" variant="headingXl">
+                              {activeCount}
+                            </Text>
+                          </BlockStack>
+                        </Card>
+                      </div>
+                    </Anim>
                   </Grid.Cell>
                   <Grid.Cell columnSpan={{ xs: 6, sm: 2, md: 2, lg: 4, xl: 4 }}>
-                    <Card>
-                      <BlockStack gap="200">
-                        <Text as="p" variant="bodyMd" tone="subdued">
-                          Total campaigns
-                        </Text>
-                        <Text as="p" variant="headingXl">
-                          {campaignCount}
-                        </Text>
-                      </BlockStack>
-                    </Card>
+                    <Anim index={3}>
+                      <div className="ap-stat-card">
+                        <Card>
+                          <BlockStack gap="200">
+                            <Text as="p" variant="bodyMd" tone="subdued">
+                              Total campaigns
+                            </Text>
+                            <Text as="p" variant="headingXl">
+                              {campaignCount}
+                            </Text>
+                          </BlockStack>
+                        </Card>
+                      </div>
+                    </Anim>
                   </Grid.Cell>
                   <Grid.Cell columnSpan={{ xs: 6, sm: 2, md: 2, lg: 4, xl: 4 }}>
-                    <Card>
-                      <BlockStack gap="200">
-                        <Text as="p" variant="bodyMd" tone="subdued">
-                          Daily budget reserved
-                        </Text>
-                        <Text as="p" variant="headingXl">
-                          ${totalBudgetReserved.toFixed(2)}
-                        </Text>
-                      </BlockStack>
-                    </Card>
+                    <Anim index={4}>
+                      <div className="ap-stat-card">
+                        <Card>
+                          <BlockStack gap="200">
+                            <Text as="p" variant="bodyMd" tone="subdued">
+                              Daily budget reserved
+                            </Text>
+                            <Text as="p" variant="headingXl">
+                              ${totalBudgetReserved.toFixed(2)}
+                            </Text>
+                          </BlockStack>
+                        </Card>
+                      </div>
+                    </Anim>
                   </Grid.Cell>
                 </Grid>
               </Layout.Section>
             </Layout>
 
-            <Card>
-              <BlockStack gap="400">
-                <InlineStack align="space-between" blockAlign="center">
-                  <Text as="h2" variant="headingMd">
-                    Connected ad accounts
-                  </Text>
-                  <NavButton url="/app/ads/connect">Add account</NavButton>
-                </InlineStack>
-                <BlockStack gap="200">
-                  {adAccounts.map((a) => (
-                    <InlineStack key={a.id} align="space-between">
-                      <Text as="p" variant="bodyMd">
-                        {a.adAccountName}
+            <Anim index={3}>
+              <div className="ap-card-hover">
+                <Card>
+                  <BlockStack gap="400">
+                    <InlineStack align="space-between" blockAlign="center">
+                      <Text as="h2" variant="headingMd">
+                        Connected ad accounts
                       </Text>
-                      <Badge tone="success">Connected</Badge>
+                      <NavButton url="/app/ads/connect">Add account</NavButton>
                     </InlineStack>
-                  ))}
-                </BlockStack>
-                <InlineStack gap="300">
-                  <NavButton variant="primary" url="/app/ads/create">
-                    Create campaign
-                  </NavButton>
-                  <NavButton url="/app/ads/campaigns">View campaigns</NavButton>
-                </InlineStack>
-              </BlockStack>
-            </Card>
+                    <BlockStack gap="200">
+                      {adAccounts.map((a) => (
+                        <InlineStack key={a.id} align="space-between">
+                          <Text as="p" variant="bodyMd">
+                            {a.adAccountName}
+                          </Text>
+                          <Badge tone="success">Connected</Badge>
+                        </InlineStack>
+                      ))}
+                    </BlockStack>
+                    <InlineStack gap="300">
+                      <NavButton variant="primary" url="/app/ads/create">
+                        Create campaign
+                      </NavButton>
+                      <NavButton url="/app/ads/campaigns">View campaigns</NavButton>
+                    </InlineStack>
+                  </BlockStack>
+                </Card>
+              </div>
+            </Anim>
           </>
         )}
       </BlockStack>
