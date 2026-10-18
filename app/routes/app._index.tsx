@@ -212,7 +212,7 @@ export default function Dashboard() {
                         : "Create posts, launch ad campaigns, and let AI do the heavy lifting."}
                     </span>
                   </Text>
-                </InlineStack>
+                </BlockStack>
                 <BlockStack gap="100">
                   <Text as="p" variant="bodySm">
                     <span style={{ color: "rgba(255,255,255,0.75)" }}>

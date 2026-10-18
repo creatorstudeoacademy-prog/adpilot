@@ -33,7 +33,6 @@
   "engines": {
     "node": ">=20.19 <22 || >=22.12"
   },
-  "name": "pixelpro-manager",
   "private": true,
   "scripts": {
     "build": "remix vite:build",
