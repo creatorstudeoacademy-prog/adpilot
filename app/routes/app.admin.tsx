@@ -207,8 +207,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     status: getAgentStatus(a),
   }));
 
-  return json({ providers, aiFailures, skills: AI_SKILLS, agents: agentsJson, providerNames });
+  return json({ providers, aiFailures, skills: AI_SKILLS, agents: agentsJson, providerNames, coupons: await listCoupons() });
 };
+
+async function listCoupons() {
+  try {
+    const all = await prisma.coupon.findMany({
+      orderBy: { createdAt: "desc" },
+      include: { _count: { select: { redemptions: true } } },
+    });
+    return all.map((c) => ({
+      code: c.code,
+      bonusPercent: c.bonusPercent,
+      expiresAt: c.expiresAt.toISOString(),
+      active: c.active,
+      uses: c._count.redemptions,
+    }));
+  } catch {
+    return [];
+  }
+}
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -876,9 +894,29 @@ function AgentsSection({
 }
 
 export default function AdminControlPanel() {
-  const { providers, aiFailures, skills, agents, providerNames } =
+  const { providers, aiFailures, skills, agents, providerNames, coupons } =
     useLoaderData<typeof loader>();
   const actionData = useActionData<{ agentError?: string; providerError?: string }>();
+  const [seedBusy, setSeedBusy] = useState(false);
+  const [seedMsg, setSeedMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const seedCoupons = async () => {
+    setSeedBusy(true);
+    setSeedMsg(null);
+    try {
+      const res = await fetch("/api/admin/seed-coupons", { method: "POST" });
+      const data = await res.json();
+      if (data.ok) {
+        setSeedMsg({ ok: true, text: `Seeded! ${data.created} new coupon(s) created.` });
+      } else {
+        setSeedMsg({ ok: false, text: data.error || "Seeding failed." });
+      }
+    } catch {
+      setSeedMsg({ ok: false, text: "Couldn't reach the server." });
+    } finally {
+      setSeedBusy(false);
+    }
+  };
   return (
     <Page title="AI Control Panel" subtitle="Manage AI providers and agents">
       <Layout>
@@ -916,6 +954,43 @@ export default function AdminControlPanel() {
                   (add / edit / enable / disable). Per-skill enable/disable and
                   fees are still managed via app/lib/pricing.ts.
                 </Text>
+              </BlockStack>
+            </Card>
+
+            <Card>
+              <BlockStack gap="300">
+                <Text as="h2" variant="headingMd">
+                  🎟️ Coupon codes
+                </Text>
+                <Text as="p" variant="bodyMd" tone="subdued">
+                  Seed the default coupon codes (WELCOME10, LAUNCH15, BOOST10,
+                  GROW20, ADS10) with expiry dates. Safe to run multiple times —
+                  existing codes are skipped.
+                </Text>
+                <InlineStack>
+                  <Button
+                    loading={seedBusy}
+                    onClick={() => void seedCoupons()}
+                  >
+                    Seed coupon codes
+                  </Button>
+                </InlineStack>
+                {seedMsg && (
+                  <Banner tone={seedMsg.ok ? "success" : "critical"}>
+                    {seedMsg.text}
+                  </Banner>
+                )}
+                <DataTable
+                  columnContentTypes={["text", "text", "numeric", "text", "text"]}
+                  headings={["Code", "Bonus", "Expires", "Status", "Uses"]}
+                  rows={coupons.map((c) => [
+                    c.code,
+                    `${c.bonusPercent}%`,
+                    new Date(c.expiresAt).toLocaleDateString(),
+                    c.active ? "Active" : "Disabled",
+                    String(c.uses),
+                  ])}
+                />
               </BlockStack>
             </Card>
           </BlockStack>
