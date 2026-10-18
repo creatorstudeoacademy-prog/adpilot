@@ -393,6 +393,7 @@ export default function ScheduledPage() {
                         key={p.id}
                         columnSpan={{ xs: 6, sm: 2, md: 2, lg: 4, xl: 4 }}
                       >
+                        <div className="ap-card-hover">
                         <Card>
                           <Box padding="400">
                             <BlockStack gap="200">
@@ -424,6 +425,7 @@ export default function ScheduledPage() {
                             </BlockStack>
                           </Box>
                         </Card>
+                        </div>
                       </Grid.Cell>
                     ))}
                   </Grid>
@@ -436,8 +438,10 @@ export default function ScheduledPage() {
             </BlockStack>
           </Box>
         </Card>
+        </Anim>
 
         {/* ── Per-post fees ── */}
+        <Anim index={4}>
         <Card>
           <Box padding="400">
             <BlockStack gap="300">
@@ -473,8 +477,10 @@ export default function ScheduledPage() {
             </BlockStack>
           </Box>
         </Card>
+        </Anim>
 
         {/* ── Posts table ── */}
+        <Anim index={4}>
         <BlockStack gap="200">
           <InlineStack align="space-between" blockAlign="center">
             <Text as="h2" variant="headingMd">
@@ -516,9 +522,11 @@ export default function ScheduledPage() {
           </Card>
         )}
         </BlockStack>
+        </Anim>
 
         {/* ── Edit modal ── */}
         {editingId && (
+          <Anim index={4}>
           <Card>
             <Box padding="400">
               <BlockStack gap="300">
@@ -559,6 +567,7 @@ export default function ScheduledPage() {
               </BlockStack>
             </Box>
           </Card>
+          </Anim>
         )}
       </BlockStack>
     </Page>
