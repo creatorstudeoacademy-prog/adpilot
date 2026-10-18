@@ -38,6 +38,7 @@ import {
 } from "../lib/pricing";
 
 import { COUNTRIES as COUNTRY_OPTIONS } from "../lib/countries";
+import { currencySymbol, formatMoney } from "../lib/format";
 
 const CTA_OPTIONS = [
   { label: "Shop Now", value: "SHOP_NOW" },
@@ -234,8 +235,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (!name) return json({ ok: false, error: "Give your funnel a name." });
   if (!productUrl) return json({ ok: false, error: "Enter the product / website URL." });
+  const budgetAcct = adAccountDbId
+    ? await prisma.adAccount.findFirst({ where: { id: adAccountDbId, shop }, select: { currency: true } })
+    : null;
+  const budgetCur = budgetAcct?.currency ?? "USD";
   if (!totalBudget || totalBudget < 3)
-    return json({ ok: false, error: "Total daily budget must be at least $3 (split across 3 stages)." });
+    return json({ ok: false, error: `Total daily budget must be at least ${currencySymbol(budgetCur)}3 (split across 3 stages).` });
   if (!headline || !primaryText || !imageUrl)
     return json({ ok: false, error: "Creative needs a headline, primary text and an image URL." });
   if (ageMin < 13 || ageMax > 65 || ageMin >= ageMax)
@@ -415,6 +420,8 @@ export default function FullFunnel() {
   const [quickBudget, setQuickBudget] = useState("30");
   const [quickBusy, setQuickBusy] = useState(false);
   const [adAccountDbId, setAdAccountDbId] = useState(adAccounts[0]?.id ?? "");
+  const acctCurrency = adAccounts.find((a) => a.id === adAccountDbId)?.currency ?? "USD";
+  const acctSymbol = currencySymbol(acctCurrency);
   const [name, setName] = useState("");
   const [productUrl, setProductUrl] = useState("");
   const [totalBudget, setTotalBudget] = useState("30");
@@ -637,7 +644,7 @@ export default function FullFunnel() {
                       variant={quickBudget === b ? "primary" : undefined}
                       onClick={() => setQuickBudget(b)}
                     >
-                      ${b}/day
+                      {acctSymbol}{b}/day
                     </Button>
                   ))}
                 </InlineStack>
@@ -707,7 +714,7 @@ export default function FullFunnel() {
                 helpText="Used as the ad destination and for the website retargeting audience."
               />
               <TextField
-                label="Total daily budget (USD)"
+                label={`Total daily budget (${acctCurrency})`}
                 type="number"
                 value={totalBudget}
                 onChange={setTotalBudget}
@@ -722,15 +729,15 @@ export default function FullFunnel() {
                     </Text>
                     <InlineStack align="space-between">
                       <Text as="p" tone="subdued">TOF — Awareness (50%)</Text>
-                      <Text as="p">${split.TOF.toFixed(2)}/day</Text>
+                      <Text as="p">{formatMoney(split.TOF, acctCurrency)}/day</Text>
                     </InlineStack>
                     <InlineStack align="space-between">
                       <Text as="p" tone="subdued">MOF — Engagement (30%)</Text>
-                      <Text as="p">${split.MOF.toFixed(2)}/day</Text>
+                      <Text as="p">{formatMoney(split.MOF, acctCurrency)}/day</Text>
                     </InlineStack>
                     <InlineStack align="space-between">
                       <Text as="p" tone="subdued">BOF — Sales (20%)</Text>
-                      <Text as="p">${split.BOF.toFixed(2)}/day</Text>
+                      <Text as="p">{formatMoney(split.BOF, acctCurrency)}/day</Text>
                     </InlineStack>
                   </BlockStack>
                 </Card>

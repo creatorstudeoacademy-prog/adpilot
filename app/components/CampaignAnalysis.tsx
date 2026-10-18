@@ -1,4 +1,5 @@
 import { Badge, BlockStack, Card, InlineStack, Text, Box, Grid } from "@shopify/polaris";
+import { formatMoney } from "../lib/format";
 
 /**
  * CampaignAnalysis — designed report UI for AI campaign analysis.
@@ -144,10 +145,12 @@ export default function CampaignAnalysis({
   raw,
   insights,
   campaignName,
+  currency,
 }: {
   raw: string;
   insights?: AnalysisInsights | null;
   campaignName?: string;
+  currency?: string;
 }) {
   const structured = tryParseStructured(raw);
 
@@ -230,12 +233,12 @@ export default function CampaignAnalysis({
         {/* Key metrics */}
         {insights && (
           <Grid columns={{ xs: 2, sm: 3, md: 6 }}>
-            <Grid.Cell><Metric label="Spend" value={`$${(insights.spend ?? 0).toFixed(2)}`} /></Grid.Cell>
+            <Grid.Cell><Metric label="Spend" value={formatMoney(insights.spend ?? 0, currency)} /></Grid.Cell>
             <Grid.Cell><Metric label="Impressions" value={fmtInt(insights.impressions)} /></Grid.Cell>
             <Grid.Cell><Metric label="Clicks" value={fmtInt(insights.clicks)} /></Grid.Cell>
             <Grid.Cell><Metric label="CTR" value={`${(insights.ctr ?? 0).toFixed(2)}%`} /></Grid.Cell>
-            <Grid.Cell><Metric label="CPC" value={`$${(insights.cpc ?? 0).toFixed(2)}`} /></Grid.Cell>
-            <Grid.Cell><Metric label="CPM" value={`$${(insights.cpm ?? 0).toFixed(2)}`} /></Grid.Cell>
+            <Grid.Cell><Metric label="CPC" value={formatMoney(insights.cpc ?? 0, currency)} /></Grid.Cell>
+            <Grid.Cell><Metric label="CPM" value={formatMoney(insights.cpm ?? 0, currency)} /></Grid.Cell>
           </Grid>
         )}
 

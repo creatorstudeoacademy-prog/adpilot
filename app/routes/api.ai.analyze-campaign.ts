@@ -36,6 +36,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   let metaCampaignId: string;
   let accessToken: string;
+  let accountCurrency = "USD";
   let campaignName = "Meta campaign";
   let campaignObjective = "unknown";
   let campaignStatus = "unknown";
@@ -51,6 +52,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
     metaCampaignId = metaCampaignIdDirect;
     accessToken = adAccount.accessToken;
+    accountCurrency = adAccount.currency || "USD";
   } else {
     if (!campaignId) {
       return json({ ok: false, error: "campaignId required." }, { status: 400 });
@@ -64,6 +66,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
     metaCampaignId = campaign.metaCampaignId;
     accessToken = campaign.adAccount.accessToken;
+    accountCurrency = campaign.adAccount.currency || "USD";
     campaignName = campaign.name;
     campaignObjective = campaign.objective;
     campaignStatus = campaign.status;
@@ -138,7 +141,7 @@ Rules:
     await prisma.activityLog.create({
       data: { shop, action: "analyze_campaign", detail: `campaign analysis: ${campaignName}` },
     });
-    return json({ ok: true, analysis: text.trim(), insights });
+    return json({ ok: true, analysis: text.trim(), insights, currency: accountCurrency });
   } catch (e) {
     return json(
       { ok: false, error: e instanceof Error ? e.message : "Analysis failed." },

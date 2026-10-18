@@ -668,13 +668,13 @@ export default function CreateCampaign() {
                 autoComplete="off"
               />
               <TextField
-                label="Daily budget (USD)"
+                label={`Daily budget (${adAccounts.find((a) => a.id === adAccountDbId)?.currency ?? "USD"})`}
                 type="number"
                 min="1"
                 value={dailyBudget}
                 onChange={setDailyBudget}
                 autoComplete="off"
-                helpText={`Wallet balance: $${walletBalance.toFixed(2)}`}
+                helpText={`Enter in ${adAccounts.find((a) => a.id === adAccountDbId)?.currency ?? "USD"} — Meta charges the ad account in its own currency. Wallet balance: $${walletBalance.toFixed(2)}`}
               />
               <Grid>
                 <Grid.Cell columnSpan={{ xs: 6, sm: 3, md: 3, lg: 6, xl: 6 }}>

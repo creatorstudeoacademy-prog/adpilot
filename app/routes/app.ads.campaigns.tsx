@@ -19,6 +19,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { deleteCampaign, getCampaigns, toggleCampaign } from "../lib/meta-ads.server";
 import { Anim, Hero } from "../components/ui";
+import { formatMoney } from "../lib/format";
 import CampaignAnalysis from "../components/CampaignAnalysis";
 
 // In-memory cache for Meta campaign lists: 5-minute TTL per ad account.
@@ -43,7 +44,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const [campaigns, adAccounts] = await Promise.all([
     prisma.campaign.findMany({
       where: { shop },
-      include: { adAccount: { select: { adAccountName: true } } },
+      include: { adAccount: { select: { adAccountName: true, currency: true } } },
       orderBy: { createdAt: "desc" },
     }),
     prisma.adAccount.findMany({ where: { shop } }),
@@ -82,6 +83,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             dailyBudget: m.daily_budget ? parseFloat(m.daily_budget) / 100 : null,
             adAccountName: acct.adAccountName,
             adAccountId: acct.adAccountId,
+            currency: acct.currency,
             metaCampaignId: m.id,
           });
         }
@@ -104,6 +106,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       status: c.status,
       dailyBudget: c.dailyBudget,
       adAccountName: c.adAccount.adAccountName,
+      currency: c.adAccount.currency,
       createdAt: c.createdAt,
       metaCampaignId: c.metaCampaignId,
       error: c.error,
@@ -321,6 +324,7 @@ export default function Campaigns() {
       cpm?: number;
     } | null;
     campaignName?: string;
+    currency?: string;
   } | null>(null);
 
   const analyze = async (id: string, campaignName?: string) => {
@@ -335,7 +339,7 @@ export default function Campaigns() {
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || "Analysis failed.");
-      setAnalysis({ id, text: data.analysis, insights: data.insights ?? null, campaignName });
+      setAnalysis({ id, text: data.analysis, insights: data.insights ?? null, campaignName, currency: data.currency ?? "USD" });
     } catch (e) {
       setAnalysis({ id, text: `Error: ${e instanceof Error ? e.message : "failed"}` });
     } finally {
@@ -355,7 +359,7 @@ export default function Campaigns() {
       });
       const data = await res.json();
       if (!data.ok) throw new Error(data.error || "Analysis failed.");
-      setAnalysis({ id, text: data.analysis, insights: data.insights ?? null, campaignName });
+      setAnalysis({ id, text: data.analysis, insights: data.insights ?? null, campaignName, currency: data.currency ?? "USD" });
     } catch (e) {
       setAnalysis({ id, text: `Error: ${e instanceof Error ? e.message : "failed"}` });
     } finally {
@@ -382,7 +386,7 @@ export default function Campaigns() {
     c.name,
     c.objective,
     statusBadge(c.status),
-    `$${c.dailyBudget.toFixed(2)}/day`,
+    `${formatMoney(c.dailyBudget, c.currency)}/day`,
     c.adAccountName,
     <InlineStack key={c.id} gap="200">
       {c.status === "active" ? (
@@ -464,7 +468,7 @@ export default function Campaigns() {
     c.name,
     c.objective,
     statusBadge(c.status),
-    c.dailyBudget != null ? `$${c.dailyBudget.toFixed(2)}/day` : "—",
+    c.dailyBudget != null ? `${formatMoney(c.dailyBudget, c.currency)}/day` : "—",
     c.adAccountName,
     <InlineStack key={c.id} gap="200" align="start">
       <Badge tone="info">Meta</Badge>
@@ -537,6 +541,7 @@ export default function Campaigns() {
                   raw={analysis.text}
                   insights={analysis.insights}
                   campaignName={analysis.campaignName}
+                  currency={analysis.currency}
                 />
               </BlockStack>
             </div>
