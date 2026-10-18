@@ -31,6 +31,11 @@ api_version = "2026-01"
   topics = ["app/scopes_update"]
   uri = "/webhooks/app/scopes_update"
 
+  # Handled by: app/routes/webhooks.orders.create.tsx
+  [[webhooks.subscriptions]]
+  topics = ["orders/create"]
+  uri = "/webhooks/orders/create"
+
   # Handled by: app/routes/webhooks.customers.data_request.tsx
   [[webhooks.subscriptions]]
   compliance_topics = ["customers/data_request"]

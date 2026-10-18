@@ -1219,6 +1219,55 @@ export async function getPixelInfo(
   return data as MetaPixelInfo;
 }
 
+/* ── Conversions API (server-side pure signals) ───────────────────── */
+
+/**
+ * Send a server-side event to Meta via the Conversions API.
+ * Used for verified Shopify orders — the "pure signal" Meta optimizes on.
+ * Pair with the browser event using the same event_id for dedup.
+ */
+export async function sendCAPIEvent(
+  pixelId: string,
+  accessToken: string,
+  event: {
+    eventName: string;
+    eventId: string;
+    eventTime?: number;
+    eventSourceUrl?: string;
+    userData?: Record<string, string | string[]>;
+    customData?: Record<string, string | number | string[]>;
+    testEventCode?: string;
+  },
+): Promise<{ eventsReceived: number; error?: string }> {
+  const res = await fetch(
+    `https://graph.facebook.com/${GRAPH_VERSION}/${pixelId}/events?access_token=${encodeURIComponent(accessToken)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        data: [
+          {
+            event_name: event.eventName,
+            event_time: event.eventTime ?? Math.floor(Date.now() / 1000),
+            event_id: event.eventId,
+            action_source: "website",
+            event_source_url: event.eventSourceUrl,
+            user_data: event.userData ?? {},
+            custom_data: event.customData ?? {},
+          },
+        ],
+        ...(event.testEventCode ? { test_event_code: event.testEventCode } : {}),
+      }),
+    },
+  );
+  const out = (await res.json().catch(() => ({}))) as {
+    events_received?: number;
+    error?: { message?: string };
+  };
+  if (out.error) return { eventsReceived: 0, error: out.error.message };
+  return { eventsReceived: out.events_received ?? 0 };
+}
+
 /* ── Catalog sales ad creative ────────────────────────────────────── */
 
 /**

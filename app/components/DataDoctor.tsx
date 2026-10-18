@@ -17,6 +17,7 @@ interface Diagnosis {
   pixelsAvailable: Array<{ id: string; name: string }>;
   issues: DoctorIssue[];
   fixFee: number;
+  signalPurity: { realOrders: number; capiPurchases: number; matchRate: number | null };
 }
 
 /**
@@ -191,6 +192,36 @@ export default function DataDoctor() {
                 )}
               </BlockStack>
             </Card>
+
+            {/* Signal purity */}
+            {diag.signalPurity.matchRate !== null && (
+              <Card>
+                <BlockStack gap="200">
+                  <InlineStack gap="200" blockAlign="center" align="space-between">
+                    <Text as="p" variant="bodySm" fontWeight="semibold">
+                      🎯 Signal purity — are pure purchase signals reaching Meta?
+                    </Text>
+                    <Badge
+                      tone={
+                        diag.signalPurity.matchRate >= 90
+                          ? "success"
+                          : diag.signalPurity.matchRate >= 50
+                            ? "warning"
+                            : "critical"
+                      }
+                    >
+                      {diag.signalPurity.matchRate}% pure
+                    </Badge>
+                  </InlineStack>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    {diag.signalPurity.realOrders} real Shopify orders →{" "}
+                    {diag.signalPurity.capiPurchases} server-side Purchase events sent to Meta
+                    (last 30 days). Every real order fires a verified Purchase via the
+                    Conversions API so Meta optimizes on clean data — never fake numbers.
+                  </Text>
+                </BlockStack>
+              </Card>
+            )}
 
             {/* Issues */}
             {diag.issues.length === 0 ? (

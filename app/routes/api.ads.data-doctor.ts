@@ -214,6 +214,29 @@ export async function loader({ request }: LoaderFunctionArgs) {
     }
   }
 
+  // ---- 2c. Signal purity: Shopify orders vs CAPI Purchase events sent ----
+  const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const capiPurchases = pixelId
+    ? await prisma.pixelEvent.count({
+        where: { shop, pixelId, eventName: "Purchase", source: "server", createdAt: { gte: monthAgo } },
+      })
+    : 0;
+  const realOrderCount = orderStats.total;
+  if (pixelId && realOrderCount > 0 && capiPurchases < realOrderCount) {
+    const missing = realOrderCount - capiPurchases;
+    issues.push({
+      id: "capi_gap",
+      severity: missing >= realOrderCount ? "critical" : "warning",
+      title: `${missing} order${missing === 1 ? "" : "s"} never reached Meta via server`,
+      detail: `Shopify had ${realOrderCount} real orders in 30 days, but only ${capiPurchases} server-side Purchase events were sent. Meta is optimizing on incomplete data.`,
+      steps: [
+        "Make sure the orders/create webhook is registered: reinstall the app if you added it recently.",
+        "Check the app logs for [capi] errors after the next order.",
+        "The browser pixel still fires — this is about the server backup signal.",
+      ],
+    });
+  }
+
   // ---- 3. Data-quality filter checks ----
   const filters = {
     dedupe: pixelSettings?.dedupeEnabled ?? true,
@@ -260,6 +283,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
     pixelsAvailable,
     issues,
     fixFee: FIX_FEE,
+    signalPurity: {
+      realOrders: realOrderCount,
+      capiPurchases,
+      matchRate: realOrderCount > 0 ? Math.min(100, Math.round((capiPurchases / realOrderCount) * 100)) : null,
+    },
   });
 }
 

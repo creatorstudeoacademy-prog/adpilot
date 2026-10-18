@@ -170,6 +170,28 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     /* scope not granted yet — AI works with Meta data only */
   }
 
+  // ---- Store maturity: new vs established (guides the whole strategy) ----
+  const realOrderCount = (() => {
+    const m = orderContext.match(/(\d+) real orders/);
+    return m ? parseInt(m[1], 10) : -1;
+  })();
+  const storeMaturity =
+    realOrderCount < 0
+      ? "unknown (order data unavailable)"
+      : realOrderCount === 0 && spend < 50
+        ? "NEW — no real orders and almost no ad spend yet"
+        : realOrderCount < 10 || spend < 500
+          ? "EARLY — a few orders / low spend, still in learning phase"
+          : "ESTABLISHED — has real sales history to optimize on";
+  const maturityGuidance =
+    storeMaturity.startsWith("NEW")
+      ? "This is a NEW store with no sales history. Do NOT pretend to optimize on data that does not exist. Instead give a LAUNCH PLAYBOOK: (1) how to warm up the pixel, (2) the smallest safe testing budget and structure (one testing campaign, broad), (3) what to fix first (pixel, catalog, creative basics), (4) when to scale (what signals to wait for). Keep budgets tiny — protect their money."
+      : storeMaturity.startsWith("EARLY")
+        ? "This store is EARLY — limited data. Be honest about what the data can and cannot prove. Focus on: validating the first winning audience/creative with small budgets, killing losers fast, and building the pixel's learning with clean signals."
+        : storeMaturity.startsWith("ESTABLISHED")
+          ? "This is an ESTABLISHED store with real sales history. Optimize hard on the real order data: double down on proven winners, cut waste precisely, scale budgets on what works."
+          : "Order data is unavailable — base the strategy on ad data but WARN the merchant that real-order validation is missing and they should grant the read_orders permission.";
+
   /* ---- Deep research: the merchant's TOTAL business picture ---- */
   const biz: {
     page?: { name?: string; followers?: number; fans?: number };
@@ -362,6 +384,7 @@ Rules:
     `\nBy age/gender:\n${fmtRows(byAgeGender, ["age", "gender"]) || "(no data)"}\n` +
     `\nBy country:\n${fmtRows(byCountry, ["country"]) || "(no data)"}\n` +
     `\nBy platform:\n${fmtRows(byPlatform, ["publisher_platform"]) || "(no data)"}\n` +
+    `\nSTORE MATURITY: ${storeMaturity}\n${maturityGuidance}\n` +
     `\nREAL STORE ORDERS (ground truth — trust over ad numbers):\n${orderContext}\n` +
     (bizLines.length > 0 ? `\nTOTAL BUSINESS PICTURE:\n${bizLines.join("\n")}\n` : "") +
     `\nAs a senior media buyer, analyze this merchant's whole business and build the sales strategy. What exact setup (age, location, placements, budget, creative) should they use so they don't waste money? What should they fix first?`;
