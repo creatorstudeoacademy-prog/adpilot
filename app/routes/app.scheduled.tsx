@@ -107,6 +107,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           postsPerDay: lifetime.postsPerDay,
           autoRenew: lifetime.autoRenew,
           endsAt: lifetime.endsAt.toISOString(),
+          topic: lifetime.topic,
+          goal: lifetime.goal,
+          socialAccountId: lifetime.socialAccountId,
+          postTime: lifetime.postTime,
         }
       : null,
     lifetimePacks: LIFETIME_PACKS.map((p) => ({
@@ -152,6 +156,12 @@ export default function ScheduledPage() {
   const [ltGoal, setLtGoal] = useState("Increase Sales");
   const [ltPage, setLtPage] = useState("");
   const [ltTime, setLtTime] = useState("09:00");
+  // Edit settings for an already-active lifetime package.
+  const [ltEditOpen, setLtEditOpen] = useState(false);
+  const [ltETopic, setLtETopic] = useState("");
+  const [ltEGoal, setLtEGoal] = useState("Increase Sales");
+  const [ltEPage, setLtEPage] = useState("");
+  const [ltETime, setLtETime] = useState("09:00");
 
   const lifetimeAction = async (
     action: string,
@@ -403,7 +413,72 @@ export default function ScheduledPage() {
                     >
                       Cancel (after 3-month term)
                     </Button>
+                    <Button
+                      variant="plain"
+                      onClick={() => {
+                        setLtETopic(lifetime.topic ?? "");
+                        setLtEGoal(lifetime.goal ?? "Increase Sales");
+                        setLtEPage(lifetime.socialAccountId ?? (socialAccounts[0]?.id ?? ""));
+                        setLtETime(lifetime.postTime ?? "09:00");
+                        setLtEditOpen(!ltEditOpen);
+                      }}
+                    >
+                      {ltEditOpen ? "Close" : "Edit settings"}
+                    </Button>
                   </InlineStack>
+                  {ltEditOpen && (
+                    <BlockStack gap="200">
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        What should the daily worker post about? Saving resets today's generation so new posts are created with these settings.
+                      </Text>
+                      <Select
+                        label="Facebook Page"
+                        options={socialAccounts.map((a) => ({
+                          label: `${a.pageName} (${a.platform})`,
+                          value: a.id,
+                        }))}
+                        value={ltEPage}
+                        onChange={setLtEPage}
+                      />
+                      <TextField
+                        label="Topic"
+                        value={ltETopic}
+                        onChange={setLtETopic}
+                        placeholder="e.g. Summer sale on watches"
+                        autoComplete="off"
+                      />
+                      <TextField
+                        label="Goal"
+                        value={ltEGoal}
+                        onChange={setLtEGoal}
+                        placeholder="e.g. Increase Sales"
+                        autoComplete="off"
+                      />
+                      <TextField
+                        label="First post time each day (UTC)"
+                        value={ltETime}
+                        onChange={setLtETime}
+                        placeholder="09:00"
+                        autoComplete="off"
+                        helpText="Posts are spread across the day from this time."
+                      />
+                      <Button
+                        variant="primary"
+                        loading={ltBusy}
+                        disabled={ltBusy || !ltETopic.trim() || !ltEPage}
+                        onClick={() =>
+                          void lifetimeAction("update-settings", undefined, {
+                            topic: ltETopic.trim(),
+                            goal: ltEGoal.trim() || "Increase Sales",
+                            socialAccountId: ltEPage,
+                            postTime: ltETime.trim() || "09:00",
+                          }).then(() => setLtEditOpen(false))
+                        }
+                      >
+                        Save settings
+                      </Button>
+                    </BlockStack>
+                  )}
                 </BlockStack>
               ) : (
                 <BlockStack gap="300">

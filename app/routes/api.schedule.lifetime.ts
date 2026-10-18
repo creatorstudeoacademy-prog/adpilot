@@ -164,5 +164,35 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ ok: true });
   }
 
+  if (act === "update-settings") {
+    const topic = String(body.topic ?? "").trim().slice(0, 500);
+    const goal = String(body.goal ?? "").trim().slice(0, 200) || "Increase Sales";
+    const socialAccountId = String(body.socialAccountId ?? "").trim();
+    const postTime = /^([01]\d|2[0-3]):[0-5]\d$/.test(String(body.postTime ?? ""))
+      ? String(body.postTime)
+      : "09:00";
+    if (!topic) {
+      return json(
+        { ok: false, error: "MISSING_TOPIC", message: "Please tell us what the posts should be about." },
+        { status: 400 },
+      );
+    }
+    const page = socialAccountId
+      ? await prisma.socialAccount.findFirst({ where: { id: socialAccountId, shop } })
+      : null;
+    if (!page) {
+      return json(
+        { ok: false, error: "NO_PAGE", message: "Please select a Facebook Page." },
+        { status: 400 },
+      );
+    }
+    await prisma.lifetimePackage.update({
+      where: { id: existing.id },
+      data: { topic, goal, socialAccountId: page.id, postTime, lastGeneratedDate: null },
+    });
+    logActivity({ shop, action: "lifetime_settings_updated", detail: `Daily posts: ${topic} (${postTime} UTC)` });
+    return json({ ok: true });
+  }
+
   return json({ ok: false, error: "BAD_ACTION", message: "Unknown action." }, { status: 400 });
 };
