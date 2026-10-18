@@ -28,6 +28,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (!coupon || !coupon.active) {
     return json({ ok: false, error: "Invalid coupon code." }, { status: 400 });
   }
+  // Edge case: expiresAt is compared in server UTC. A coupon created with
+  // "30 days" validity expires exactly 30×24h after creation in UTC, which
+  // can feel up to a day early/late for merchants in far timezones. Accepted
+  // as-is: coupon windows are day-granular and generous.
   if (coupon.expiresAt < new Date()) {
     return json({ ok: false, error: "This coupon has expired." }, { status: 400 });
   }

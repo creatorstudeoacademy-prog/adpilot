@@ -11,9 +11,9 @@ application_url = "https://adpilot-production-c9f8.up.railway.app"
 embedded = true
 
 [access_scopes]
-# AdPilot stores social accounts and scheduled posts in its own database.
-# No storefront/theme access needed.
-scopes = ""
+# read_products: the Compose product picker queries the Admin API product catalog.
+# (write_files is NOT needed — uploads go to local /data/media.)
+scopes = "read_products"
 
 [auth]
 redirect_urls = ["https://adpilot-production-c9f8.up.railway.app/auth/callback"]
@@ -31,6 +31,17 @@ api_version = "2026-01"
   topics = ["app/scopes_update"]
   uri = "/webhooks/app/scopes_update"
 
+  # Handled by: app/routes/webhooks.customers.data_request.tsx
   [[webhooks.subscriptions]]
-  compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
+  compliance_topics = ["customers/data_request"]
   uri = "/webhooks/customers/data_request"
+
+  # Handled by: app/routes/webhooks.customers.redact.tsx
+  [[webhooks.subscriptions]]
+  compliance_topics = ["customers/redact"]
+  uri = "/webhooks/customers/redact"
+
+  # Handled by: app/routes/webhooks.shop.redact.tsx
+  [[webhooks.subscriptions]]
+  compliance_topics = ["shop/redact"]
+  uri = "/webhooks/shop/redact"

@@ -3,7 +3,7 @@ import { json } from "@remix-run/node";
 
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import { deduct, getWallet, isFreeShop } from "../lib/wallet.server";
+import { deduct, getWallet, isFreeShop, refund } from "../lib/wallet.server";
 import {
   LIFETIME_BILLING_DAYS,
   LIFETIME_MAX_POSTS_PER_DAY,
@@ -14,9 +14,11 @@ import { logActivity } from "../lib/activity.server";
 
 /**
  * POST /api/schedule/lifetime
- * Body: { action: "activate", postsPerDay } | { action: "cancel" } | { action: "toggle-renew" }
+ * Body: { action: "activate", packId, topic, goal, socialAccountId, postTime }
+ *      | { action: "cancel" } | { action: "toggle-renew" }
  *
- * - activate: charges 90 days upfront (10% off), locks for 3 months, no cancel before endsAt.
+ * - activate: charges 90 days upfront (25% off), locks for 3 months, no cancel before endsAt.
+ *   The daily worker generates postsPerDay AI posts every day until endsAt.
  * - cancel: only allowed after the 3-month lock (sets autoRenew=false, status stays active till endsAt).
  * - toggle-renew: flips autoRenew.
  */
@@ -24,7 +26,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  let body: { action?: unknown; postsPerDay?: unknown; packId?: unknown } = {};
+  let body: { action?: unknown; postsPerDay?: unknown; packId?: unknown; topic?: unknown; goal?: unknown; socialAccountId?: unknown; postTime?: unknown } = {};
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -50,6 +52,29 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       : Math.max(1, Math.min(LIFETIME_MAX_POSTS_PER_DAY, Math.floor(Number(body.postsPerDay) || 1)));
     const fee = lifetimeFee(postsPerDay);
 
+    // Generation config — required so the daily worker knows what to post.
+    const topic = String(body.topic ?? "").trim().slice(0, 500);
+    const goal = String(body.goal ?? "").trim().slice(0, 200) || "Increase Sales";
+    const socialAccountId = String(body.socialAccountId ?? "").trim();
+    const postTime = /^([01]\d|2[0-3]):[0-5]\d$/.test(String(body.postTime ?? ""))
+      ? String(body.postTime)
+      : "09:00";
+    if (!topic) {
+      return json(
+        { ok: false, error: "MISSING_TOPIC", message: "Please tell us what the posts should be about." },
+        { status: 400 },
+      );
+    }
+    const page = socialAccountId
+      ? await prisma.socialAccount.findFirst({ where: { id: socialAccountId, shop } })
+      : null;
+    if (!page) {
+      return json(
+        { ok: false, error: "NO_PAGE", message: "Please select a Facebook Page." },
+        { status: 400 },
+      );
+    }
+
     const wallet = await getWallet(shop);
     if (!isFreeShop(shop) && wallet.balance < fee) {
       return json(
@@ -66,22 +91,39 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     const now = new Date();
-    const rec = await prisma.lifetimePackage.create({
-      data: {
-        shop,
-        postsPerDay,
-        feeCharged: isFreeShop(shop) ? 0 : fee,
-        status: "active",
-        autoRenew: true,
-        startsAt: now,
-        endsAt: new Date(now.getTime() + LIFETIME_BILLING_DAYS * 24 * 60 * 60 * 1000),
-      },
-    });
+    let rec;
+    try {
+      rec = await prisma.lifetimePackage.create({
+        data: {
+          shop,
+          postsPerDay,
+          feeCharged: isFreeShop(shop) ? 0 : fee,
+          status: "active",
+          autoRenew: true,
+          startsAt: now,
+          endsAt: new Date(now.getTime() + LIFETIME_BILLING_DAYS * 24 * 60 * 60 * 1000),
+          topic,
+          goal,
+          socialAccountId: page.id,
+          postTime,
+          activeKey: shop, // atomic guard: unique → concurrent activates can't double-charge
+        },
+      });
+    } catch (e) {
+      // Unique violation on activeKey = another request activated concurrently. Refund.
+      if (!isFreeShop(shop)) {
+        await refund(shop, fee, "Refund: concurrent lifetime activation");
+      }
+      return json(
+        { ok: false, error: "ALREADY_ACTIVE", message: "Lifetime package is already active." },
+        { status: 400 },
+      );
+    }
 
     logActivity({
       shop,
       action: "lifetime_activated",
-      detail: `${postsPerDay} posts/day × 3 months, $${fee.toFixed(2)}`,
+      detail: `${postsPerDay} posts/day × 3 months, $${fee.toFixed(2)}, topic: ${topic.slice(0, 60)}`,
       feeCharged: isFreeShop(shop) ? 0 : fee,
     });
     return json({ ok: true, id: rec.id, endsAt: rec.endsAt.toISOString() });

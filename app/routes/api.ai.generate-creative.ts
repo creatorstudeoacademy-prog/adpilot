@@ -29,8 +29,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const topic = String(body.topic ?? "").trim();
   const objective = String(body.objective ?? "TRAFFIC").trim() || "TRAFFIC";
   const tone = String(body.tone ?? "Professional").trim() || "Professional";
-  // Funnel flows already charge the funnel fee — creative is included, no extra charge.
-  const funnelSource = String(body.source ?? "") === "funnel";
+  // Funnel flows already charge the funnel fee — creative is included, no extra
+  // charge. The waiver is NOT trust-on-client: it requires a FunnelGroup
+  // created by this shop in the last 30 minutes (the funnel flow creates the
+  // group right before generating creative).
+  let funnelSource = String(body.source ?? "") === "funnel";
+  if (funnelSource) {
+    const recentFunnel = await prisma.funnelGroup.findFirst({
+      where: { shop, createdAt: { gte: new Date(Date.now() - 30 * 60 * 1000) } },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!recentFunnel) funnelSource = false; // no recent funnel → charge normally
+  }
   if (!topic) {
     return json({ ok: false, error: "Describe what the ad is about." }, { status: 400 });
   }

@@ -1,3 +1,5 @@
+import { decryptToken } from "./token-vault.server";
+
 /**
  * Server-only helpers for the Meta Graph API (Facebook + Instagram publishing).
  *
@@ -28,6 +30,8 @@ async function graphFetch(
   accessToken: string,
   params: Record<string, string>,
 ): Promise<any> {
+  // Tokens are encrypted at rest; legacy plaintext rows pass through.
+  accessToken = decryptToken(accessToken);
   const body = new URLSearchParams({ access_token: accessToken, ...params });
   const res = await fetch(`${GRAPH_BASE}${path}`, {
     method: "POST",
@@ -35,6 +39,12 @@ async function graphFetch(
   });
   const data = (await res.json()) as GraphError & Record<string, any>;
   if (!res.ok || data.error) {
+    const code = data.error?.code;
+    if (code === 190) {
+      throw new Error(
+        "TOKEN_EXPIRED: Your Facebook connection expired — reconnect it in Accounts, then try again.",
+      );
+    }
     throw new Error(
       data.error?.message ?? `Meta API error (HTTP ${res.status})`,
     );

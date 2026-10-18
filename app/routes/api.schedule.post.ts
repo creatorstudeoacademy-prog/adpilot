@@ -39,6 +39,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (act === "delete") {
+    // Manual posts paid per-post at schedule time — refund it. Package posts
+    // were covered by the bundle fee, so there is no per-post amount to return.
+    if (!post.schedulePackageId && !post.lifetimePackageId) {
+      const { refund } = await import("../lib/wallet.server");
+      const { POST_PUBLISH_FEE } = await import("../lib/pricing");
+      await refund(shop, POST_PUBLISH_FEE, `Refund: deleted scheduled post`, post.id);
+    }
     await prisma.scheduledPost.delete({ where: { id } });
     logActivity({ shop, action: "schedule_post_deleted", detail: `Deleted scheduled post ${id.slice(-6)}` });
     return json({ ok: true });

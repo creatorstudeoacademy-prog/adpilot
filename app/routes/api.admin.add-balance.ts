@@ -2,20 +2,23 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 
 import { authenticate } from "../shopify.server";
-import { getWallet } from "../lib/wallet.server";
+import { getWallet, normalizeShopDomain } from "../lib/wallet.server";
 import prisma from "../db.server";
 
 /**
  * POST /api/admin/add-balance (JSON: { amount })
- * GET  /api/admin/add-balance?amount=50
  *
  * Admin-only: adds test balance to the wallet. For dev/testing only.
+ * POST-only: a GET must never mutate wallet state.
  */
 async function addBalance(request: Request, shop: string, amount: number) {
-  // Only allow on free/dev shops or the admin shop.
-  const freeShops = (process.env.FREE_SHOP_DOMAINS ?? "").split(",").map((s) => s.trim());
-  const adminShop = (process.env.ADMIN_SHOP_DOMAIN ?? "").trim();
-  if (!freeShops.includes(shop) && shop !== adminShop) {
+  // Only allow on free/dev shops or the admin shop (case-insensitive match).
+  const freeShops = (process.env.FREE_SHOP_DOMAINS ?? "")
+    .split(",")
+    .map((s) => normalizeShopDomain(s));
+  const adminShop = normalizeShopDomain(process.env.ADMIN_SHOP_DOMAIN ?? "");
+  const normalizedShop = normalizeShopDomain(shop);
+  if (!freeShops.includes(normalizedShop) && normalizedShop !== adminShop) {
     return json({ ok: false, error: "Not allowed." }, { status: 403 });
   }
   if (!amount || amount <= 0 || amount > 1000) {
@@ -51,8 +54,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   return addBalance(request, session.shop, Number(body.amount ?? 0));
 };
 
-export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
-  const url = new URL(request.url);
-  return addBalance(request, session.shop, Number(url.searchParams.get("amount") ?? 0));
+export const loader = async ({}: LoaderFunctionArgs) => {
+  return json(
+    { ok: false, error: "Use POST with a JSON body { amount }." },
+    { status: 405 },
+  );
 };

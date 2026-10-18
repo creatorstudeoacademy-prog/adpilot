@@ -13,7 +13,7 @@ const ADMIN_SHOP = process.env.ADMIN_SHOP_DOMAIN ?? "";
  */
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
-  if (ADMIN_SHOP && session.shop !== ADMIN_SHOP) {
+  if (!ADMIN_SHOP || session.shop !== ADMIN_SHOP) {
     return json({ ok: false, error: "Admin only." }, { status: 403 });
   }
 

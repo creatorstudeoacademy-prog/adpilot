@@ -77,7 +77,9 @@ model ScheduledPost {
   publishedAt     DateTime?
   error           String?
   createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
   schedulePackageId String? // which auto-schedule package this post came from (null = manual)
+  lifetimePackageId String? // lifetime auto-post package that generated this post (null = not lifetime)
 }
 
 /// A connected Meta ad account (for running ads).
@@ -272,6 +274,8 @@ model SchedulePackage {
   startsAt    DateTime @default(now())
   endsAt      DateTime
   createdAt   DateTime @default(now())
+  /// Client-generated idempotency key — prevents double-charge on double-click.
+  idempotencyKey String? @unique
 
   @@index([shop, status])
 }
@@ -282,11 +286,20 @@ model LifetimePackage {
   shop        String
   postsPerDay Int
   feeCharged  Float
-  status      String   @default("active") // active | cancelled
+  status      String   @default("active") // active | expired | cancelled
   autoRenew   Boolean  @default(true)
   startsAt    DateTime @default(now())
   endsAt      DateTime
   createdAt   DateTime @default(now())
+  // Auto-generation config (captured at activation)
+  topic             String    @default("")
+  goal              String    @default("Increase Sales")
+  socialAccountId   String?
+  postTime          String    @default("09:00") // HH:MM base time (UTC)
+  lastGeneratedDate DateTime?
+  // Atomic activation guard: set to shop while active (unique), null otherwise.
+  // Prevents double-activation races from double-charging.
+  activeKey   String?  @unique
 
   @@index([shop, status])
 }

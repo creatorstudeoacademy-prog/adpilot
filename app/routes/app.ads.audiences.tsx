@@ -154,6 +154,29 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   const intent = String(form.get("intent") ?? "create");
 
+  // Delete an audience (DB record; best-effort Meta cleanup if it was published).
+  if (intent === "delete") {
+    const audienceId = String(form.get("audienceId") ?? "");
+    const rec = await prisma.audience.findFirst({ where: { id: audienceId, shop } });
+    if (!rec) return json({ ok: false, error: "Audience not found." });
+    if (rec.metaAudienceId && rec.status === "active") {
+      try {
+        const adAccount = await prisma.adAccount.findFirst({
+          where: { id: rec.adAccountId, shop },
+        });
+        if (adAccount) {
+          const { deleteAudience } = await import("../lib/meta-ads.server");
+          await deleteAudience(rec.metaAudienceId, adAccount.accessToken);
+        }
+      } catch {
+        // Meta delete is best-effort; the DB record is the source of truth here.
+      }
+    }
+    await prisma.audience.delete({ where: { id: rec.id } });
+    await logActivity({ shop, action: "audience_deleted", detail: rec.name, feeCharged: 0 });
+    return json({ ok: true, message: `Deleted "${rec.name}".` });
+  }
+
   // ✨ AI Auto-create audience: analyzes page + objective, generates targeting via AI
   if (intent === "auto_create") {
     const adAccountDbId = String(form.get("adAccountDbId") ?? "");
@@ -164,6 +187,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       where: { id: adAccountDbId, shop },
     });
     if (!adAccount) return json({ ok: false, error: "Select an ad account." });
+
+    // Wallet check BEFORE the AI call — don't burn owner AI cost for
+    // merchants who can't pay.
+    const fee = AI_AUDIENCE_FEE;
+    const wallet = await getWallet(shop);
+    if (!isFreeShop(shop) && wallet.balance < fee) {
+      return redirect("/app/wallet?need=" + fee.toFixed(2));
+    }
 
     // Get page info for AI context
     const page = await prisma.socialAccount.findFirst({
@@ -228,19 +259,13 @@ Return ONLY the JSON, no other text.`;
     }
 
     // Create the audience in DB
-    const fee = AI_AUDIENCE_FEE;
-    const wallet = await getWallet(shop);
-    if (!isFreeShop(shop) && wallet.balance < fee) {
-      return redirect("/app/wallet?need=" + fee.toFixed(2));
-    }
-
     const audience = await prisma.audience.create({
       data: {
         shop,
         adAccountId: adAccount.id,
         name,
         type: "interest",
-        status: "active",
+        status: "draft", // flipped to "active" only after payment + Meta success
         publishFee: fee,
         config: JSON.stringify({
           ...targeting,
@@ -266,7 +291,7 @@ Return ONLY the JSON, no other text.`;
       );
       await prisma.audience.update({
         where: { id: audience.id },
-        data: { metaAudienceId: result.id, subtype: "SAVED" },
+        data: { metaAudienceId: result.id, subtype: "SAVED", status: "active" },
       });
       await logActivity(shop, `AI created audience: ${name}`);
       return json({
@@ -314,7 +339,7 @@ Return ONLY the JSON, no other text.`;
       adAccountId: adAccount.id,
       name,
       type,
-      status: "active",
+      status: "draft", // flipped to "active" only after payment + Meta success
       publishFee: fee,
       config: JSON.stringify(Object.fromEntries(form)),
     },
@@ -465,6 +490,13 @@ export default function AudienceManager() {
     submit(fd, { method: "post" });
   };
 
+  const deleteAudienceRow = (audienceId: string) => {
+    const fd = new FormData();
+    fd.set("intent", "delete");
+    fd.set("audienceId", audienceId);
+    submit(fd, { method: "post" });
+  };
+
   const rows = audiences.map((a) => [
     a.name,
     <Badge key={a.id}>{a.type}</Badge>,
@@ -476,6 +508,15 @@ export default function AudienceManager() {
     ),
     a.approxCount != null ? a.approxCount.toLocaleString() : "—",
     new Date(a.createdAt).toLocaleDateString(),
+    <Button
+      key={a.id + "-del"}
+      variant="plain"
+      tone="critical"
+      disabled={busy}
+      onClick={() => void deleteAudienceRow(a.id)}
+    >
+      Delete
+    </Button>,
   ]);
 
   return (
@@ -766,8 +807,8 @@ export default function AudienceManager() {
                   </Text>
                 ) : (
                   <DataTable
-                    columnContentTypes={["text", "text", "text", "text", "text", "text"]}
-                    headings={["Name", "Type", "Ad account", "Status", "Size", "Created"]}
+                    columnContentTypes={["text", "text", "text", "text", "text", "text", "text"]}
+                    headings={["Name", "Type", "Ad account", "Status", "Size", "Created", ""]}
                     rows={rows}
                   />
                 )}

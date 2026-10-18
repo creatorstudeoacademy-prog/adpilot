@@ -73,6 +73,36 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     },
   });
 
+  // Edit mode: prefill the form from an existing draft campaign.
+  const editId = new URL(request.url).searchParams.get("edit");
+  let draft: Record<string, unknown> | null = null;
+  if (editId) {
+    const d = await prisma.campaign.findFirst({
+      where: { id: editId, shop, status: "draft" },
+    });
+    if (d) {
+      draft = {
+        id: d.id,
+        adAccountDbId: d.adAccountId,
+        objective: d.objective,
+        name: d.name,
+        dailyBudget: d.dailyBudget,
+        startDate: d.startDate ? d.startDate.toISOString().slice(0, 10) : "",
+        endDate: d.endDate ? d.endDate.toISOString().slice(0, 10) : "",
+        adSetCount: d.adSetCount,
+        creative: {
+          headline: d.headline ?? "",
+          primaryText: d.primaryText ?? "",
+          description: d.description ?? "",
+          imageUrl: d.imageUrl ?? "",
+          destinationUrl: d.destinationUrl ?? "",
+          cta: d.cta ?? "SHOP_NOW",
+        },
+        audienceDbId: d.audienceDbId ?? "",
+      };
+    }
+  }
+
   return json({
     adAccounts: adAccounts.map((a) => ({
       id: a.id,
@@ -85,6 +115,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     isFreeShop: isFreeShop(shop),
     pages,
     audiences,
+    draft,
   });
 };
 
@@ -198,31 +229,62 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return redirect("/app/wallet?need=" + fee.total.toFixed(2));
   }
 
-  // Create draft record first.
+  // Edit mode: update the existing draft instead of creating a duplicate.
+  const editId = String(form.get("editId") ?? "");
   const firstCreative = creatives[0];
-  const campaign = await prisma.campaign.create({
-    data: {
-      shop,
-      adAccountId: adAccount.id,
-      name,
-      objective,
-      status: "draft",
-      dailyBudget,
-      startDate: startDateStr ? new Date(startDateStr) : null,
-      endDate: endDateStr ? new Date(endDateStr) : null,
-      headline: firstCreative.headline,
-      primaryText: firstCreative.primaryText,
-      description: firstCreative.description,
-      imageUrl: firstCreative.imageUrl,
-      destinationUrl: firstCreative.destinationUrl,
-      cta: firstCreative.cta,
-      adSetCount,
-      creativeCount: creatives.length,
-      publishFee: fee.total,
-      audienceDbId: targetingMode === "saved" && audienceDbId ? audienceDbId : null,
-      audienceName,
-    },
-  });
+  let campaign: { id: string };
+  if (editId) {
+    const existing = await prisma.campaign.findFirst({
+      where: { id: editId, shop, status: "draft" },
+    });
+    if (!existing) return json({ ok: false, error: "Draft not found." });
+    campaign = await prisma.campaign.update({
+      where: { id: existing.id },
+      data: {
+        adAccountId: adAccount.id,
+        name,
+        objective,
+        dailyBudget,
+        startDate: startDateStr ? new Date(startDateStr) : null,
+        endDate: endDateStr ? new Date(endDateStr) : null,
+        headline: firstCreative.headline,
+        primaryText: firstCreative.primaryText,
+        description: firstCreative.description,
+        imageUrl: firstCreative.imageUrl,
+        destinationUrl: firstCreative.destinationUrl,
+        cta: firstCreative.cta,
+        adSetCount,
+        creativeCount: creatives.length,
+        publishFee: fee.total,
+        audienceDbId: targetingMode === "saved" && audienceDbId ? audienceDbId : null,
+      },
+    });
+  } else {
+    // Create draft record first.
+    campaign = await prisma.campaign.create({
+      data: {
+        shop,
+        adAccountId: adAccount.id,
+        name,
+        objective,
+        status: "draft",
+        dailyBudget,
+        startDate: startDateStr ? new Date(startDateStr) : null,
+        endDate: endDateStr ? new Date(endDateStr) : null,
+        headline: firstCreative.headline,
+        primaryText: firstCreative.primaryText,
+        description: firstCreative.description,
+        imageUrl: firstCreative.imageUrl,
+        destinationUrl: firstCreative.destinationUrl,
+        cta: firstCreative.cta,
+        adSetCount,
+        creativeCount: creatives.length,
+        publishFee: fee.total,
+        audienceDbId: targetingMode === "saved" && audienceDbId ? audienceDbId : null,
+        audienceName,
+      },
+    });
+  }
 
   // Deduct the publish fee from the wallet BEFORE calling Meta.
   await deduct(
@@ -297,26 +359,71 @@ const EMPTY_CREATIVE: CreativeForm = {
 };
 
 export default function CreateCampaign() {
-  const { adAccounts, walletBalance, isFreeShop, pages, audiences } = useLoaderData<typeof loader>();
+  const { adAccounts, walletBalance, isFreeShop, pages, audiences, draft } =
+    useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const submit = useSubmit();
   const nav = useNavigation();
   const busy = nav.state === "submitting";
+  const d = (draft ?? {}) as Record<string, any>;
+  const dCreative = (d.creative ?? {}) as Record<string, string>;
 
   const [step, setStep] = useState(1);
-  const [objective, setObjective] = useState("TRAFFIC");
-  const [adAccountDbId, setAdAccountDbId] = useState(adAccounts[0]?.id ?? "");
-  const [name, setName] = useState("");
-  const [dailyBudget, setDailyBudget] = useState("10");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [adSetCount, setAdSetCount] = useState(1);
-  const [creatives, setCreatives] = useState<CreativeForm[]>([{ ...EMPTY_CREATIVE }]);
-  const [targetingMode, setTargetingMode] = useState<"new" | "saved">("new");
-  const [audienceDbId, setAudienceDbId] = useState(audiences[0]?.id ?? "");
+  const [objective, setObjective] = useState<string>((d.objective as string) ?? "TRAFFIC");
+  const [adAccountDbId, setAdAccountDbId] = useState<string>(
+    (d.adAccountDbId as string) ?? adAccounts[0]?.id ?? "",
+  );
+  const [name, setName] = useState<string>((d.name as string) ?? "");
+  const [dailyBudget, setDailyBudget] = useState<string>(
+    d.dailyBudget != null ? String(d.dailyBudget) : "10",
+  );
+  const [startDate, setStartDate] = useState<string>((d.startDate as string) ?? "");
+  const [endDate, setEndDate] = useState<string>((d.endDate as string) ?? "");
+  const [adSetCount, setAdSetCount] = useState<number>(Number(d.adSetCount) || 1);
+  const [creatives, setCreatives] = useState<CreativeForm[]>([
+    d.creative
+      ? {
+          headline: dCreative.headline ?? "",
+          primaryText: dCreative.primaryText ?? "",
+          description: dCreative.description ?? "",
+          imageUrl: dCreative.imageUrl ?? "",
+          destinationUrl: dCreative.destinationUrl ?? "",
+          cta: dCreative.cta ?? "SHOP_NOW",
+        }
+      : { ...EMPTY_CREATIVE },
+  ]);
+  const [targetingMode, setTargetingMode] = useState<"new" | "saved">(
+    d.audienceDbId ? "saved" : "new",
+  );
+  const [audienceDbId, setAudienceDbId] = useState(
+    (d.audienceDbId as string) || audiences[0]?.id || "",
+  );
   const [country, setCountry] = useState("US");
   const [ageMin, setAgeMin] = useState("18");
   const [ageMax, setAgeMax] = useState("65");
+  const [pixelTesting, setPixelTesting] = useState(false);
+  const [pixelTestMsg, setPixelTestMsg] = useState("");
+  const [pixelTestOk, setPixelTestOk] = useState(false);
+
+  const sendPixelTest = async () => {
+    setPixelTesting(true);
+    setPixelTestMsg("");
+    try {
+      const res = await fetch("/api/pixel/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ adAccountDbId }),
+      });
+      const data = (await res.json()) as { ok: boolean; message?: string; error?: string };
+      setPixelTestOk(!!data.ok);
+      setPixelTestMsg(data.ok ? data.message ?? "Sent." : data.error ?? "Failed.");
+    } catch {
+      setPixelTestOk(false);
+      setPixelTestMsg("Could not reach the server.");
+    } finally {
+      setPixelTesting(false);
+    }
+  };
   const [aiFilling, setAiFilling] = useState<number | null>(null);
   const [aiFillError, setAiFillError] = useState("");
   const [uploading, setUploading] = useState<number | null>(null);
@@ -426,6 +533,7 @@ export default function CreateCampaign() {
 
   const publish = () => {
     const data = new FormData();
+    if (d.id) data.set("editId", String(d.id));
     data.set("adAccountDbId", adAccountDbId);
     data.set("objective", objective);
     data.set("name", name);
@@ -526,9 +634,25 @@ export default function CreateCampaign() {
               {(() => {
                 const selected = adAccounts.find((a) => a.id === adAccountDbId);
                 return selected?.pixelId ? (
-                  <Text as="p" variant="bodySm" tone="success">
-                    ✓ Meta Pixel {selected.pixelId} connected — conversions will be tracked
-                  </Text>
+                  <BlockStack gap=\"100\">
+                    <Text as=\"p\" variant=\"bodySm\" tone=\"success\">
+                      ✓ Meta Pixel {selected.pixelId} connected — conversions will be tracked
+                    </Text>
+                    <Button
+                      size=\"slim\"
+                      variant=\"plain\"
+                      disabled={busy}
+                      loading={pixelTesting}
+                      onClick={sendPixelTest}
+                    >
+                      Send test event
+                    </Button>
+                    {pixelTestMsg && (
+                      <Text as=\"p\" variant=\"bodySm\" tone={pixelTestOk ? \"success\" : \"critical\"}>
+                        {pixelTestMsg}
+                      </Text>
+                    )}
+                  </BlockStack>
                 ) : (
                   <Text as="p" variant="bodySm" tone="subdued">
                     No Meta Pixel connected.{" "}
@@ -945,7 +1069,8 @@ export default function CreateCampaign() {
                 </Text>
                 <Text as="p" variant="bodySm" tone="critical">
                   This action is irreversible. The publishing fee will be
-                  deducted from your wallet immediately and cannot be refunded.
+                  deducted from your wallet immediately. It is refunded
+                  automatically if Meta rejects the publish.
                 </Text>
               </BlockStack>
 

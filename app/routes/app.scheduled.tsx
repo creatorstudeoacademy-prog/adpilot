@@ -44,7 +44,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const [posts, activePackage, allPackages, lifetime] = await Promise.all([
+  const [posts, activePackage, allPackages, lifetime, socialAccounts] = await Promise.all([
     prisma.scheduledPost.findMany({
       where: { shop },
       include: { socialAccount: true },
@@ -63,6 +63,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     prisma.lifetimePackage.findFirst({
       where: { shop, status: "active" },
       orderBy: { createdAt: "desc" },
+    }),
+    prisma.socialAccount.findMany({
+      where: { shop },
+      select: { id: true, pageName: true, platform: true },
     }),
   ]);
 
@@ -111,6 +115,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       postsPerDay: p.postsPerDay,
       fee: lifetimeFee(p.postsPerDay),
     })),
+    socialAccounts: socialAccounts.map((a) => ({
+      id: a.id,
+      pageName: a.pageName,
+      platform: a.platform,
+    })),
     fees: {
       text: TEXT_POST_FEE,
       photo: PHOTO_POST_FEE,
@@ -125,7 +134,7 @@ function formatDate(iso: string | null) {
 }
 
 export default function ScheduledPage() {
-  const { posts, activePackage, packages, fees, boughtPackages, lifetime, lifetimePacks } =
+  const { posts, activePackage, packages, fees, boughtPackages, lifetime, lifetimePacks, socialAccounts } =
     useLoaderData<typeof loader>();
   const revalidator = useRevalidator();
   const [buyError, setBuyError] = useState<string | null>(null);
@@ -137,18 +146,29 @@ export default function ScheduledPage() {
   const [pkgFilter, setPkgFilter] = useState<string>("all");
   const [ltBusy, setLtBusy] = useState(false);
   const [ltPack, setLtPack] = useState<string | null>(null);
+  // Lifetime activation form (topic/goal/page/time for the daily worker).
+  const [ltFormPack, setLtFormPack] = useState<string | null>(null);
+  const [ltTopic, setLtTopic] = useState("");
+  const [ltGoal, setLtGoal] = useState("Increase Sales");
+  const [ltPage, setLtPage] = useState("");
+  const [ltTime, setLtTime] = useState("09:00");
 
-  const lifetimeAction = async (action: string, packId?: string) => {
+  const lifetimeAction = async (
+    action: string,
+    packId?: string,
+    cfg?: { topic: string; goal: string; socialAccountId: string; postTime: string },
+  ) => {
     setBuyError(null);
     setLtBusy(true);
     try {
       const res = await fetch("/api/schedule/lifetime", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, packId }),
+        body: JSON.stringify({ action, packId, ...(cfg ?? {}) }),
       });
       const data = (await res.json()) as { ok: boolean; message?: string };
       if (data.ok) {
+        setLtFormPack(null);
         revalidator.revalidate();
       } else {
         setBuyError(data.message || "Couldn't update lifetime package.");
@@ -417,11 +437,68 @@ export default function ScheduledPage() {
                                 disabled={ltBusy}
                                 onClick={() => {
                                   setLtPack(p.id);
-                                  void lifetimeAction("activate", p.id);
+                                  setLtFormPack(ltFormPack === p.id ? null : p.id);
+                                  if (!ltPage && socialAccounts.length > 0) {
+                                    setLtPage(socialAccounts[0].id);
+                                  }
                                 }}
                               >
-                                Activate
+                                {ltFormPack === p.id ? "Close" : "Activate"}
                               </Button>
+                              {ltFormPack === p.id && (
+                                <BlockStack gap="200">
+                                  <Text as="p" variant="bodySm" tone="subdued">
+                                    Tell us what to post about — our worker auto-generates{" "}
+                                    {p.postsPerDay} posts every day.
+                                  </Text>
+                                  <Select
+                                    label="Facebook Page"
+                                    options={socialAccounts.map((a) => ({
+                                      label: `${a.pageName} (${a.platform})`,
+                                      value: a.id,
+                                    }))}
+                                    value={ltPage}
+                                    onChange={setLtPage}
+                                  />
+                                  <TextField
+                                    label="Topic"
+                                    value={ltTopic}
+                                    onChange={setLtTopic}
+                                    placeholder="e.g. Summer sale on watches"
+                                    autoComplete="off"
+                                  />
+                                  <TextField
+                                    label="Goal"
+                                    value={ltGoal}
+                                    onChange={setLtGoal}
+                                    placeholder="e.g. Increase Sales"
+                                    autoComplete="off"
+                                  />
+                                  <TextField
+                                    label="First post time each day (UTC)"
+                                    value={ltTime}
+                                    onChange={setLtTime}
+                                    placeholder="09:00"
+                                    autoComplete="off"
+                                    helpText="Posts are spread across the day from this time."
+                                  />
+                                  <Button
+                                    variant="primary"
+                                    loading={ltBusy}
+                                    disabled={ltBusy || !ltTopic.trim() || !ltPage}
+                                    onClick={() =>
+                                      void lifetimeAction("activate", p.id, {
+                                        topic: ltTopic.trim(),
+                                        goal: ltGoal.trim() || "Increase Sales",
+                                        socialAccountId: ltPage,
+                                        postTime: ltTime.trim() || "09:00",
+                                      })
+                                    }
+                                  >
+                                    Confirm & Activate (${p.fee.toFixed(2)})
+                                  </Button>
+                                </BlockStack>
+                              )}
                             </BlockStack>
                           </Box>
                         </Card>
@@ -541,7 +618,7 @@ export default function ScheduledPage() {
                   autoComplete="off"
                 />
                 <TextField
-                  label="Time"
+                  label="Time (UTC)"
                   type="time"
                   value={editTime}
                   onChange={setEditTime}

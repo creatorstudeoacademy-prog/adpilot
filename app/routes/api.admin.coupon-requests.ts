@@ -7,7 +7,7 @@ import prisma from "../db.server";
 const ADMIN_SHOP = process.env.ADMIN_SHOP_DOMAIN ?? "";
 
 function requireAdmin(shop: string) {
-  if (ADMIN_SHOP && shop !== ADMIN_SHOP) {
+  if (!ADMIN_SHOP || shop !== ADMIN_SHOP) {
     throw new Response("Not found", { status: 404 });
   }
 }

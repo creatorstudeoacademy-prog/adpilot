@@ -330,7 +330,7 @@ export default function Dashboard() {
               <QuickAction
                 icon={SendIcon}
                 title="Compose post"
-                desc="Write and publish to Facebook in seconds. $0.50/post"
+                desc="Write and publish to Facebook in seconds. $0.20/post"
                 url="/app/compose"
                 primary
               />

@@ -1,0 +1,14 @@
+# Learn more about web pixels:
+# https://shopify.dev/docs/apps/build/marketing-analytics/build-web-pixels
+
+[[extensions]]
+type = "web_pixel"
+name = "adpilot-web-pixel"
+handle = "adpilot-web-pixel"
+
+  [extensions.settings]
+  [[extensions.settings.fields]]
+  key = "pixel_id"
+  type = "text"
+  name = "Meta Pixel ID"
+  description = "Your Meta Pixel ID (numbers only). Find it in AdPilot > Accounts, or in Meta Events Manager."

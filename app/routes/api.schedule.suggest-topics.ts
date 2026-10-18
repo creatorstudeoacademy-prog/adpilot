@@ -15,7 +15,13 @@ import {
  */
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
-  void session.shop;
+  const shop = session.shop;
+
+  const { checkRateLimit, rateLimitMessage } = await import("../lib/rate-limit.server");
+  const rl = await checkRateLimit(shop, "suggest_topics");
+  if (!rl.ok) {
+    return json({ ok: false, error: rateLimitMessage("suggest_topics", rl.limit) }, { status: 429 });
+  }
 
   let body: { goal?: unknown } = {};
   try {
@@ -56,6 +62,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const match = raw.match(/\[[\s\S]*\]/);
     const topics = JSON.parse(match ? match[0] : raw) as string[];
     if (!Array.isArray(topics)) throw new Error("not array");
+    const { logActivity } = await import("../lib/activity.server");
+    logActivity({ shop, action: "suggest_topics", detail: `goal:${goal.slice(0, 60)}` });
     return json({ ok: true, topics: topics.map((t) => String(t).slice(0, 120)).slice(0, 5) });
   } catch {
     return json({ ok: false, error: "PARSE_FAILED", message: "Try again." }, { status: 502 });

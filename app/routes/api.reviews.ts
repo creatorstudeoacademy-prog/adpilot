@@ -7,7 +7,8 @@ import prisma from "../db.server";
 /**
  * GET /api/reviews — list approved reviews.
  * POST /api/reviews — submit a review { author, rating, title, content }.
- * Submissions need admin approval before showing.
+ * Reviews publish instantly (no approval gate, per product decision).
+ * One review per shop — resubmitting updates the existing review.
  */
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
@@ -46,6 +47,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ ok: false, error: "Please fill in your name, a headline and your review." }, { status: 400 });
   }
 
+  // One review per shop: resubmitting updates the existing one.
+  const existing = await prisma.review.findFirst({ where: { shop } });
+  if (existing) {
+    await prisma.review.update({
+      where: { id: existing.id },
+      data: { author, rating, title, content, approved: true },
+    });
+    return json({ ok: true, message: "Thanks! Your review has been updated." });
+  }
   await prisma.review.create({
     data: { shop, author, rating, title, content, approved: true },
   });

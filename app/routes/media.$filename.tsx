@@ -53,6 +53,7 @@ export const loader = async ({ params }: LoaderFunctionArgs) => {
       "Content-Type": mime,
       "Content-Length": String(size),
       "Cache-Control": "public, max-age=31536000, immutable",
+      "X-Content-Type-Options": "nosniff",
     },
   });
 };

@@ -18,11 +18,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  let body: { packageId?: unknown; accountId?: unknown; posts?: unknown } = {};
+  let body: { packageId?: unknown; accountId?: unknown; posts?: unknown; idempotencyKey?: unknown } = {};
   try {
     body = (await request.json()) as typeof body;
   } catch {
     body = {};
+  }
+
+  // Idempotency: a client-generated key dedupes double-clicks/retries.
+  const idempotencyKey = String(body.idempotencyKey ?? "").trim().slice(0, 64) || null;
+  if (idempotencyKey) {
+    const dup = await prisma.schedulePackage.findUnique({ where: { idempotencyKey } });
+    if (dup && dup.shop === shop) {
+      const count = await prisma.scheduledPost.count({ where: { schedulePackageId: dup.id } });
+      return json({ ok: true, count, packageId: dup.id, deduped: true });
+    }
   }
 
   const accountId = String(body.accountId ?? "").trim();
@@ -72,26 +82,58 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
   }
 
-  if (!isFreeShop(shop)) {
-    await deduct(shop, fee, pkg ? `${pkg.label} package` : `Scheduled posts (${posts.length})`);
+  // deduct() writes a $0 "waived" ledger entry for free shops, so the
+  // ledger stays consistent — call it unconditionally.
+  await deduct(shop, fee, pkg ? `${pkg.label} package` : `Scheduled posts (${posts.length})`);
+
+  // Everything after the charge must not leave the merchant paying for
+  // nothing: any DB failure below triggers a refund.
+  try {
+    return await approveTransaction();
+  } catch (e) {
+    if (!isFreeShop(shop)) {
+      const { refund } = await import("../lib/wallet.server");
+      await refund(shop, fee, `Refund: schedule approve failed after charge`);
+    }
+    throw e;
   }
 
+  async function approveTransaction() {
   // Create package record if applicable.
   let packageRecord = null;
   if (pkg) {
     const now = new Date();
-    packageRecord = await prisma.schedulePackage.create({
-      data: {
-        shop,
-        packageId: pkg.id,
-        totalPosts: pkg.posts,
-        usedPosts: posts.length,
-        feeCharged: isFreeShop(shop) ? 0 : fee,
-        status: "active",
-        startsAt: now,
-        endsAt: new Date(now.getTime() + pkg.days * 24 * 60 * 60 * 1000),
-      },
-    });
+    try {
+      packageRecord = await prisma.schedulePackage.create({
+        data: {
+          shop,
+          packageId: pkg.id,
+          totalPosts: pkg.posts,
+          usedPosts: posts.length,
+          feeCharged: isFreeShop(shop) ? 0 : fee,
+          status: "active",
+          startsAt: now,
+          endsAt: new Date(now.getTime() + pkg.days * 24 * 60 * 60 * 1000),
+          idempotencyKey,
+        },
+      });
+    } catch {
+      // Unique violation on idempotencyKey: a parallel request already
+      // created it — return the existing one instead of double-charging.
+      if (idempotencyKey) {
+        const dup = await prisma.schedulePackage.findUnique({ where: { idempotencyKey } });
+        if (dup && dup.shop === shop) {
+          const count = await prisma.scheduledPost.count({ where: { schedulePackageId: dup.id } });
+          // We already deducted above — refund the duplicate charge.
+          if (!isFreeShop(shop)) {
+            const { refund } = await import("../lib/wallet.server");
+            await refund(shop, fee, `Refund: duplicate schedule approve (idempotency)`);
+          }
+          return json({ ok: true, count, packageId: dup.id, deduped: true });
+        }
+      }
+      throw new Error("Could not create the package record.");
+    }
   }
 
   // Auto-spread times: never allow two posts at the same date+time.
@@ -157,4 +199,5 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   });
 
   return json({ ok: true, count: created.length, packageId: packageRecord?.id ?? null });
+  } // end approveTransaction
 };

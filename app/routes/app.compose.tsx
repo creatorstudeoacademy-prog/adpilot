@@ -188,12 +188,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       mediaType,
       platforms: JSON.stringify(platforms),
       scheduledAt,
-      status: "scheduled",
+      status: "draft", // flipped to "scheduled" only after successful payment
     },
   });
 
   // Charge the publish fee now, at schedule time.
+  // If deduct throws, the post stays "draft" so the worker never publishes it free.
   await deduct(shop, POST_PUBLISH_FEE, `Scheduled post fee`, post.id);
+  await prisma.scheduledPost.update({
+    where: { id: post.id },
+    data: { status: "scheduled" },
+  });
   logActivity({
     shop,
     action: "post_schedule",
@@ -696,11 +701,12 @@ export default function ComposePage() {
                       />
                       {!publishNow && (
                         <TextField
-                          label="Schedule for"
+                          label="Schedule for (UTC)"
                           type="datetime-local"
                           value={scheduledAt}
                           onChange={setScheduledAt}
                           autoComplete="off"
+                          helpText="Times are in UTC."
                         />
                       )}
                       <Button
@@ -710,10 +716,12 @@ export default function ComposePage() {
                         disabled={busy}
                         fullWidth
                       >
-                        {publishNow ? "Publish now ($0.50)" : "Schedule post ($0.50)"}
+                        {publishNow
+                          ? `Publish now ($${POST_PUBLISH_FEE.toFixed(2)})`
+                          : `Schedule post ($${POST_PUBLISH_FEE.toFixed(2)})`}
                       </Button>
                       <Text as="p" variant="bodySm" tone="subdued" alignment="center">
-                        $0.50 will be deducted from your wallet (balance: $
+                        ${POST_PUBLISH_FEE.toFixed(2)} will be deducted from your wallet (balance: $
                         {walletBalance.toFixed(2)}).
                       </Text>
                     </BlockStack>

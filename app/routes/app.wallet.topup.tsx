@@ -41,32 +41,42 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const data = await response.json();
     const charge = data?.data?.node;
     if (charge?.status === "ACTIVE") {
+      // Idempotency: never credit the same charge twice (page refresh safe).
+      const alreadyCredited = await prisma.walletTransaction.findFirst({
+        where: { shop, type: "topup", metaRef: chargeId },
+      });
+      if (alreadyCredited) return redirect("/app/wallet?topped=1");
       const amount = parseFloat(charge.price.amount);
       const pack = TOPUP_PACKS.find((p) => p.price === Math.round(amount));
       if (pack) {
         const bonus = pack.credit - pack.price;
 
         // Coupon bonus: validate (not expired, not already used by this shop).
+        // Race-safe: the create is the single source of truth — a unique
+        // violation means a parallel callback already redeemed it, so we
+        // proceed WITHOUT the bonus instead of failing the paid top-up.
         let couponBonus = 0;
         let couponId: string | null = null;
         if (couponCode) {
           const coupon = await prisma.coupon.findUnique({ where: { code: couponCode } });
-          const alreadyUsed = coupon
-            ? await prisma.couponRedemption.findUnique({
-                where: { couponId_shop: { couponId: coupon.id, shop } },
-              })
-            : null;
-          if (coupon && coupon.active && coupon.expiresAt >= new Date() && !alreadyUsed) {
-            couponBonus = Math.round(((pack.price * coupon.bonusPercent) / 100) * 100) / 100;
-            couponId = coupon.id;
-            await prisma.couponRedemption.create({
-              data: { couponId: coupon.id, shop },
-            });
-            // Mark the sent coupon as used.
-            await prisma.shopCoupon.updateMany({
-              where: { couponId: coupon.id, shop },
-              data: { usedAt: new Date() },
-            });
+          if (coupon && coupon.active && coupon.expiresAt >= new Date()) {
+            try {
+              await prisma.couponRedemption.create({
+                data: { couponId: coupon.id, shop },
+              });
+              couponBonus = Math.round(((pack.price * coupon.bonusPercent) / 100) * 100) / 100;
+              couponId = coupon.id;
+              // Mark the sent coupon as used.
+              await prisma.shopCoupon.updateMany({
+                where: { couponId: coupon.id, shop },
+                data: { usedAt: new Date() },
+              });
+            } catch {
+              // Already redeemed (parallel callback won the race) — no bonus,
+              // but the top-up itself must still be credited below.
+              couponBonus = 0;
+              couponId = null;
+            }
           }
         }
 

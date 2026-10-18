@@ -23,7 +23,7 @@ function getFreeShopDomains(): string[] {
     .filter(Boolean);
 }
 
-function normalizeShopDomain(shop: string): string {
+export function normalizeShopDomain(shop: string): string {
   return (shop ?? "")
     .trim()
     .toLowerCase()
@@ -46,7 +46,7 @@ export async function getWallet(shop: string) {
   return wallet;
 }
 
-/** Credit the wallet (after a successful Shopify one-time charge). */
+/** Credit the wallet (after a successful Shopify one-time charge). Idempotent per metaRef. */
 export async function topup(
   shop: string,
   amount: number,
@@ -57,6 +57,13 @@ export async function topup(
   if (amount <= 0) throw new Error("Topup amount must be positive.");
   const total = amount + bonus;
   const wallet = await getWallet(shop);
+  // Belt-and-suspenders: skip if this charge was already credited.
+  if (metaRef) {
+    const existing = await prisma.walletTransaction.findFirst({
+      where: { shop, type: "topup", metaRef },
+    });
+    if (existing) return wallet;
+  }
   const updated = await prisma.wallet.update({
     where: { id: wallet.id },
     data: { balance: { increment: total } },
@@ -100,30 +107,35 @@ export async function deduct(shop: string, amount: number, description: string, 
     });
     return wallet;
   }
-  if (wallet.balance < amount) {
-    throw new Error(
-      `Insufficient wallet balance ($${wallet.balance.toFixed(2)}). Please top up at least $${amount.toFixed(2)}.`,
-    );
-  }
-  const updated = await prisma.wallet.update({
-    where: { id: wallet.id },
-    data: { balance: { decrement: amount } },
+  // Atomic check-and-decrement: prevents concurrent deducts from overdrawing.
+  const result = await prisma.$transaction(async (tx) => {
+    const updated = await tx.wallet.updateMany({
+      where: { id: wallet.id, balance: { gte: amount } },
+      data: { balance: { decrement: amount } },
+    });
+    if (updated.count === 0) {
+      throw new Error(
+        `Insufficient wallet balance ($${wallet.balance.toFixed(2)}). Please top up at least $${amount.toFixed(2)}.`,
+      );
+    }
+    await tx.walletTransaction.create({
+      data: {
+        shop,
+        walletId: wallet.id,
+        amount: -amount,
+        type: "ad_spend",
+        description,
+        metaRef,
+      },
+    });
+    return tx.wallet.findUniqueOrThrow({ where: { id: wallet.id } });
   });
-  await prisma.walletTransaction.create({
-    data: {
-      shop,
-      walletId: wallet.id,
-      amount: -amount,
-      type: "ad_spend",
-      description,
-      metaRef,
-    },
-  });
-  return updated;
+  return result;
 }
 
 /** Refund a previous deduction (e.g. when Meta publish fails after deduct). */
 export async function refund(shop: string, amount: number, description: string, metaRef?: string) {
+  if (amount <= 0) throw new Error("Refund amount must be positive.");
   const wallet = await getWallet(shop);
   if (isFreeShop(shop)) {
     // Nothing was ever charged for a free shop — refunding would create

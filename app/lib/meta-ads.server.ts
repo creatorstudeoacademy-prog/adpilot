@@ -1,3 +1,5 @@
+import { decryptToken } from "./token-vault.server";
+
 /**
  * Server-only helpers for the Meta Marketing API (ad accounts, campaigns, ads).
  *
@@ -20,6 +22,8 @@ async function marketingFetch(
   params: Record<string, string>,
   method: "GET" | "POST" | "DELETE" = "POST",
 ): Promise<any> {
+  // Tokens are encrypted at rest; legacy plaintext rows pass through.
+  accessToken = decryptToken(accessToken);
   const url =
     method === "GET"
       ? `${GRAPH_BASE}${path}?${new URLSearchParams({ access_token: accessToken, ...params })}`
@@ -51,6 +55,8 @@ async function marketingFetch(
 
 /** Turn raw Meta errors into user-friendly messages. */
 function friendlyMetaError(message: string): string {
+  if (/\(code 190\)|invalid.*token|token.*(expired|invalid)|session.*expired/i.test(message))
+    return "TOKEN_EXPIRED: Your Facebook connection expired — reconnect it in Accounts, then try again.";
   if (/permission|authorized|scope/i.test(message))
     return "Meta denied this action. Your Meta app may need App Review approval for ads permissions (ads_management, ads_read).";
   if (/budget/i.test(message))
@@ -58,6 +64,12 @@ function friendlyMetaError(message: string): string {
   if (/account.*(disabled|inactive|restricted)/i.test(message))
     return "This ad account is disabled or restricted in Meta Ads Manager.";
   return message;
+}
+
+/** True when the error means the Meta token expired (merchant must reconnect). */
+export function isTokenExpiredError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e ?? "");
+  return msg.startsWith("TOKEN_EXPIRED:");
 }
 
 import { OBJECTIVE_MAP } from "./meta-ads";
@@ -85,6 +97,7 @@ export async function createCampaign(
   name: string,
   objective: string,
 ): Promise<string> {
+  accessToken = decryptToken(accessToken);
   const metaObjective = OBJECTIVE_MAP[objective] ?? OBJECTIVE_MAP.TRAFFIC;
   // Send as JSON with proper array type for special_ad_categories
   const url = `${GRAPH_BASE}/act_${adAccountId}/campaigns`;
@@ -188,6 +201,7 @@ export async function createAdCreative(
     pageId: string;
   },
 ): Promise<string> {
+  accessToken = decryptToken(accessToken);
   // Resolve redirects — Meta's adimages API doesn't follow them.
   let imageUrl = opts.imageUrl;
   try {
@@ -458,6 +472,14 @@ export async function deleteCampaign(
   accessToken: string,
 ): Promise<void> {
   await marketingFetch(`/${campaignId}`, accessToken, {}, "DELETE");
+}
+
+/** Delete a custom/saved audience from Meta (permanent, best-effort). */
+export async function deleteAudience(
+  audienceId: string,
+  accessToken: string,
+): Promise<void> {
+  await marketingFetch(`/${audienceId}`, accessToken, {}, "DELETE");
 }
 
 /* ------------------------------------------------------------------ */
@@ -867,6 +889,8 @@ export interface CreateFullFunnelInput {
   imageUrl: string;
   destinationUrl: string;
   cta?: string;
+  /** Retry mode: only build these stages (skips the rest entirely). */
+  onlyStages?: Array<"TOF" | "MOF" | "BOF">;
 }
 
 /**
@@ -897,10 +921,14 @@ export async function createFullFunnel(
     }),
   );
   const byStage = (s: "TOF" | "MOF" | "BOF") => stages.find((x) => x.stage === s)!;
+  // Retry mode: only build the requested stages.
+  const want = (s: "TOF" | "MOF" | "BOF") =>
+    !input.onlyStages || input.onlyStages.includes(s);
 
   /* ---- Step 1: audiences (each stage gets its own separately created audience) ---- */
 
   // TOF: saved audience, broad (country + age).
+  if (want("TOF")) {
   try {
     byStage("TOF").audienceId = await createSavedAudience(
       adAccountId,
@@ -911,8 +939,10 @@ export async function createFullFunnel(
   } catch (e) {
     byStage("TOF").audienceFallback = true;
   }
+  }
 
   // MOF: custom audience — video viewers + page engagers.
+  if (want("MOF")) {
   try {
     byStage("MOF").audienceId = await createCustomAudience(adAccountId, accessToken, {
       name: `${input.funnelName} - MOF Video Viewers`,
@@ -923,8 +953,10 @@ export async function createFullFunnel(
   } catch (e) {
     byStage("MOF").audienceFallback = true;
   }
+  }
 
   // BOF: custom audience — website visitors (needs a pixel on the ad account).
+  if (want("BOF")) {
   try {
     const pixels = await getAdPixels(adAccountId, accessToken);
     if (pixels.length === 0) {
@@ -940,6 +972,7 @@ export async function createFullFunnel(
     });
   } catch (e) {
     byStage("BOF").audienceFallback = true;
+  }
   }
 
   /* ---- Step 2: campaigns + ad sets + ads per stage ---- */
@@ -989,7 +1022,7 @@ export async function createFullFunnel(
     },
   ];
 
-  for (const def of stageDefs) {
+  for (const def of stageDefs.filter((d) => want(d.stage))) {
     const res = byStage(def.stage);
     try {
       const campaignName = `${input.funnelName} - ${def.stage}`;

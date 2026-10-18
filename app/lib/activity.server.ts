@@ -22,7 +22,10 @@ export type ActivityAction =
   | "post_schedule"
   | "ad_publish"
   | "audience_create"
-  | "wallet_topup";
+  | "wallet_topup"
+  | "support_chat"
+  | "suggest_topics"
+  | "analyze_campaign";
 
 interface LogInput {
   shop: string;

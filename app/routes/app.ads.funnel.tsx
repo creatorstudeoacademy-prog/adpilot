@@ -106,6 +106,118 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const shop = session.shop;
   const form = await request.formData();
 
+  const intent = String(form.get("intent") ?? "create");
+
+  // Retry failed funnel stages without re-charging (the fee was already paid).
+  if (intent === "retry_failed") {
+    const funnelId = String(form.get("funnelId") ?? "");
+    const funnel = await prisma.funnelGroup.findFirst({
+      where: { id: funnelId, shop },
+      include: { campaigns: true },
+    });
+    if (!funnel || (funnel.status !== "partial" && funnel.status !== "failed")) {
+      return json({ ok: false, error: "Nothing to retry for this funnel." });
+    }
+    const failed = funnel.campaigns.filter((c) => c.status === "failed");
+    if (failed.length === 0) {
+      return json({ ok: false, error: "All stages already succeeded." });
+    }
+    const adAccount = await prisma.adAccount.findFirst({
+      where: { id: funnel.adAccountId, shop },
+    });
+    if (!adAccount) return json({ ok: false, error: "Ad account not found." });
+    const page = await prisma.socialAccount.findFirst({
+      where: { shop, platform: "facebook" },
+    });
+    if (!page) return json({ ok: false, error: "Connect a Facebook Page first." });
+
+    // All stages share the same creative — reuse it from a failed campaign.
+    const ref = failed[0];
+    if (!ref.headline || !ref.primaryText || !ref.imageUrl) {
+      return json({ ok: false, error: "Missing creative on failed stages — rebuild the funnel." });
+    }
+    const onlyStages = failed.map((c) => c.funnelStage) as Array<"TOF" | "MOF" | "BOF">;
+
+    try {
+      const { createFullFunnel } = await import("../lib/meta-ads.server");
+      const result = await createFullFunnel({
+        adAccountId: adAccount.adAccountId,
+        accessToken: adAccount.accessToken,
+        pageId: page.pageId,
+        funnelName: funnel.name,
+        totalDailyBudget: funnel.totalDailyBudget,
+        country: funnel.country,
+        ageMin: funnel.ageMin,
+        ageMax: funnel.ageMax,
+        headline: ref.headline,
+        primaryText: ref.primaryText,
+        description: ref.description ?? "",
+        imageUrl: ref.imageUrl,
+        destinationUrl: funnel.destinationUrl ?? ref.destinationUrl ?? "",
+        cta: ref.cta ?? "SHOP_NOW",
+        onlyStages,
+      });
+      let succeeded = 0;
+      for (const stage of result.stages) {
+        if (!onlyStages.includes(stage.stage)) continue; // not retried
+        const campaign = funnel.campaigns.find((c) => c.funnelStage === stage.stage);
+        if (!campaign) continue;
+        if (stage.campaignId) {
+          succeeded++;
+          await prisma.campaign.update({
+            where: { id: campaign.id },
+            data: {
+              status: "active",
+              metaCampaignId: stage.campaignId,
+              metaAdSetId: stage.adSetId ? JSON.stringify([stage.adSetId]) : null,
+              metaAdId: stage.adId ? JSON.stringify([stage.adId]) : null,
+              error: stage.audienceFallback
+                ? "Audience creation fell back to standard targeting."
+                : null,
+            },
+          });
+        } else {
+          await prisma.campaign.update({
+            where: { id: campaign.id },
+            data: { status: "failed", error: stage.error },
+          });
+        }
+      }
+      const totalActive = funnel.campaigns.filter(
+        (c) => c.status === "active" || result.stages.find((s) => s.stage === c.funnelStage)?.campaignId,
+      ).length;
+      const funnelStatus = totalActive === 3 ? "active" : totalActive > 0 ? "partial" : "failed";
+      await prisma.funnelGroup.update({
+        where: { id: funnel.id },
+        data: {
+          status: funnelStatus,
+          error:
+            totalActive < 3
+              ? `Retry partial: ${result.stages
+                  .filter((s) => s.error)
+                  .map((s) => `${s.stage}: ${s.error}`)
+                  .join(" | ")}`
+              : null,
+        },
+      });
+      logActivity({
+        shop,
+        action: "ad_publish",
+        detail: `funnel retry:${funnel.id} stages:${succeeded}/${failed.length} (no re-charge)`,
+        feeCharged: 0,
+      });
+      return json({
+        ok: true,
+        message: `Retried ${failed.length} stage(s): ${succeeded} succeeded.`,
+      });
+    } catch (e) {
+      return json({
+        ok: false,
+        error: e instanceof Error ? e.message : "Retry failed.",
+      });
+    }
+  }
+
   const adAccountDbId = String(form.get("adAccountDbId") ?? "");
   const name = String(form.get("name") ?? "").trim();
   const productUrl = String(form.get("productUrl") ?? "").trim();
@@ -921,8 +1033,8 @@ export default function FullFunnel() {
                 </Text>
                 <Text as="p" variant="bodySm" tone="critical">
                   This action is irreversible. The ${FUNNEL_TOTAL_FEE.toFixed(2)}{" "}
-                  publishing fee will be deducted from your wallet immediately
-                  and cannot be refunded.
+                  publishing fee will be deducted from your wallet immediately.
+                  It is refunded automatically if Meta rejects the publish.
                 </Text>
               </BlockStack>
 

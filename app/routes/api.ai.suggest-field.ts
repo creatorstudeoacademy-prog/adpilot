@@ -42,7 +42,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   const free = isFreeShop(shop);
-  if (!free) {
+  // FEE is 0 (free) — skip wallet entirely, deduct() rejects non-positive amounts.
+  if (!free && FEE > 0) {
     const wallet = await getWallet(shop);
     if (wallet.balance < FEE) {
       return json(

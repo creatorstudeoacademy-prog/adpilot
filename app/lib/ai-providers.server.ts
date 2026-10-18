@@ -106,13 +106,24 @@ function needDelegate(): AiProviderDelegate {
 }
 
 /** Derive the 32-byte AES key. Falls back to SHOPIFY_API_SECRET (see header). */
+let vaultFallbackWarned = false;
 function getVaultKey(): Buffer {
-  const raw =
-    (process.env.AI_VAULT_KEY ?? "").trim() ||
-    (process.env.SHOPIFY_API_SECRET ?? "").trim();
+  const dedicated = (process.env.AI_VAULT_KEY ?? "").trim();
+  const raw = dedicated || (process.env.SHOPIFY_API_SECRET ?? "").trim();
   if (!raw) {
     throw new Error(
       "Cannot encrypt provider keys: set AI_VAULT_KEY (or SHOPIFY_API_SECRET fallback) in env.",
+    );
+  }
+  // The fallback couples AI/Meta token encryption to the Shopify secret: a
+  // secret rotation orphans every encrypted key. Warn once so the owner sets
+  // the dedicated AI_VAULT_KEY env var.
+  if (!dedicated && !vaultFallbackWarned) {
+    vaultFallbackWarned = true;
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[adpilot vault] AI_VAULT_KEY is not set — using SHOPIFY_API_SECRET fallback. " +
+        "Set a dedicated AI_VAULT_KEY in Railway env vars to avoid orphaning encrypted keys on secret rotation.",
     );
   }
   return createHash("sha256").update(raw, "utf8").digest();

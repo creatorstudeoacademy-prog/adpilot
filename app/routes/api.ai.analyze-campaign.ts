@@ -28,9 +28,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const metaCampaignIdDirect = String(body.metaCampaignId ?? "");
   const adAccountIdDirect = String(body.adAccountId ?? "");
 
+  const { checkRateLimit, rateLimitMessage } = await import("../lib/rate-limit.server");
+  const rl = await checkRateLimit(shop, "analyze_campaign");
+  if (!rl.ok) {
+    return json({ ok: false, error: rateLimitMessage("analyze_campaign", rl.limit) }, { status: 429 });
+  }
+
   let metaCampaignId: string;
   let accessToken: string;
   let campaignName = "Meta campaign";
+  let campaignObjective = "unknown";
+  let campaignStatus = "unknown";
+  let campaignBudget: number | null = null;
 
   if (metaCampaignIdDirect && adAccountIdDirect) {
     // Direct Meta campaign (created in Meta Ads Manager, no DB record).
@@ -56,6 +65,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     metaCampaignId = campaign.metaCampaignId;
     accessToken = campaign.adAccount.accessToken;
     campaignName = campaign.name;
+    campaignObjective = campaign.objective;
+    campaignStatus = campaign.status;
+    campaignBudget = campaign.dailyBudget;
   }
 
   let insights;
@@ -80,10 +92,10 @@ Rules:
 
   const userPrompt =
     `Analyze this Meta ad campaign (last 30 days):\n` +
-    `Name: ${campaign.name}\n` +
-    `Objective: ${campaign.objective}\n` +
-    `Status: ${campaign.status}\n` +
-    `Daily budget: $${campaign.dailyBudget}\n` +
+    `Name: ${campaignName}\n` +
+    `Objective: ${campaignObjective}\n` +
+    `Status: ${campaignStatus}\n` +
+    `Daily budget: $${campaignBudget != null ? campaignBudget.toFixed(2) : "n/a"}\n` +
     `Impressions: ${insights.impressions}\n` +
     `Reach: ${insights.reach ?? "n/a"}\n` +
     `Clicks: ${insights.clicks}\n` +
@@ -114,7 +126,7 @@ Rules:
       text = await generateWithProvider(providers[0], systemPrompt, userPrompt);
     }
     await prisma.activityLog.create({
-      data: { shop, action: "ai_generate", detail: `campaign analysis: ${campaign.name}` },
+      data: { shop, action: "analyze_campaign", detail: `campaign analysis: ${campaignName}` },
     });
     return json({ ok: true, analysis: text.trim(), insights });
   } catch (e) {

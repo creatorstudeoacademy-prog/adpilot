@@ -1,7 +1,7 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { useState } from "react";
-import { useLoaderData, useSubmit, useNavigation, useSearchParams } from "@remix-run/react";
+import { useLoaderData, useSubmit, useFetcher, useNavigation, useSearchParams } from "@remix-run/react";
 import {
   Badge,
   Banner,
@@ -20,9 +20,24 @@ import prisma from "../db.server";
 import { deleteCampaign, getCampaigns, toggleCampaign } from "../lib/meta-ads.server";
 import { Anim, Hero } from "../components/ui";
 
+// In-memory cache for Meta campaign lists: 5-minute TTL per ad account.
+// Avoids hammering the Graph API (rate limits) on every page load.
+const CAMPAIGN_CACHE_TTL_MS = 5 * 60 * 1000;
+const campaignCache = new Map<string, { at: number; data: Awaited<ReturnType<typeof getCampaigns>> }>();
+
+async function getCampaignsCached(adAccountId: string, accessToken: string, force = false) {
+  const key = `${adAccountId}`;
+  const hit = campaignCache.get(key);
+  if (!force && hit && Date.now() - hit.at < CAMPAIGN_CACHE_TTL_MS) return hit.data;
+  const data = await getCampaigns(adAccountId, accessToken);
+  campaignCache.set(key, { at: Date.now(), data });
+  return data;
+}
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
+  const forceRefresh = new URL(request.url).searchParams.get("refresh") === "1";
 
   const [campaigns, adAccounts] = await Promise.all([
     prisma.campaign.findMany({
@@ -54,7 +69,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     adAccounts.map(async (acct) => {
       metaFetchAttempted = true;
       try {
-        const list = await getCampaigns(acct.adAccountId, acct.accessToken);
+        const list = await getCampaignsCached(acct.adAccountId, acct.accessToken, forceRefresh);
         for (const m of list) {
           // Skip ones already tracked locally (avoid duplicates).
           if (localMetaIds.has(m.id)) continue;
@@ -91,6 +106,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       createdAt: c.createdAt,
       metaCampaignId: c.metaCampaignId,
       error: c.error,
+      funnelGroupId: c.funnelGroupId,
       source: "adpilot" as const,
     })),
     metaCampaigns,
@@ -116,20 +132,126 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ ok: false, error: "Campaign not found." });
   }
   // Toggle needs Meta ID; delete works for drafts too.
-  if (intent !== "delete" && !campaign.metaCampaignId) {
+  // Retry works for failed campaigns (fee was refunded on failure).
+  if (intent !== "delete" && intent !== "retry" && !campaign.metaCampaignId) {
     return json({ ok: false, error: "Campaign not published to Meta yet." });
+  }
+
+  // Retry a failed standalone campaign: re-deduct (it was refunded) and re-publish.
+  if (intent === "retry") {
+    if (campaign.status !== "failed") {
+      return json({ ok: false, error: "Only failed campaigns can be retried." });
+    }
+    if (campaign.funnelGroupId) {
+      return json({
+        ok: false,
+        error: "Funnel campaigns retry from the funnel — use “Retry funnel stages”.",
+      });
+    }
+    if (!campaign.headline || !campaign.primaryText || !campaign.imageUrl) {
+      return json({ ok: false, error: "Campaign is missing its creative — please recreate it." });
+    }
+    const { publishFullCampaign } = await import("../lib/meta-ads.server");
+    const { calculatePublishFee } = await import("../lib/pricing");
+    const { deduct, getWallet, isFreeShop, refund } = await import("../lib/wallet.server");
+    const fee = calculatePublishFee(
+      campaign.objective,
+      campaign.adSetCount,
+      campaign.creativeCount,
+    );
+    const page = await prisma.socialAccount.findFirst({
+      where: { shop, platform: "facebook" },
+    });
+    if (!page) return json({ ok: false, error: "Connect a Facebook Page first." });
+    const wallet = await getWallet(shop);
+    if (!isFreeShop(shop) && wallet.balance < fee.total) {
+      return json({
+        ok: false,
+        error: `Insufficient wallet balance — need $${fee.total.toFixed(2)}.`,
+        needTopup: true,
+      });
+    }
+    if (!isFreeShop(shop)) {
+      await deduct(shop, fee.total, `Ad publish retry: ${campaign.name}`, campaign.id);
+    }
+    try {
+      const result = await publishFullCampaign({
+        adAccountId: campaign.adAccount.adAccountId,
+        accessToken: campaign.adAccount.accessToken,
+        pageId: page.pageId,
+        name: campaign.name,
+        objective: campaign.objective,
+        adSets: Array.from({ length: campaign.adSetCount }, (_, i) => ({
+          name: campaign.adSetCount > 1 ? `${campaign.name} - Ad Set ${i + 1}` : `${campaign.name} - Ad Set`,
+          dailyBudget: campaign.dailyBudget,
+          startDate: campaign.startDate,
+          endDate: campaign.endDate,
+        })),
+        creatives: [
+          {
+            headline: campaign.headline,
+            primaryText: campaign.primaryText,
+            description: campaign.description ?? "",
+            imageUrl: campaign.imageUrl,
+            destinationUrl: campaign.destinationUrl ?? "",
+            cta: campaign.cta ?? "SHOP_NOW",
+          },
+        ],
+      });
+      await prisma.campaign.update({
+        where: { id: campaign.id },
+        data: {
+          status: "active",
+          metaCampaignId: result.campaignId,
+          metaAdSetId: JSON.stringify(result.adSetIds),
+          metaAdId: JSON.stringify(result.adIds),
+          error: null,
+        },
+      });
+      return json({ ok: true, message: "Campaign published." });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Meta publish failed.";
+      if (!isFreeShop(shop)) {
+        await refund(shop, fee.total, `Refund: retry publish failed for ${campaign.name}`, campaign.id);
+      }
+      await prisma.campaign.update({
+        where: { id: campaign.id },
+        data: { status: "failed", error: message },
+      });
+      return json({ ok: false, error: message });
+    }
   }
 
   try {
     if (intent === "delete") {
       // Draft/failed campaigns have no Meta ID — just delete from DB.
       if (campaign.metaCampaignId) {
-        await deleteCampaign(campaign.metaCampaignId, campaign.adAccount.accessToken);
+        try {
+          await deleteCampaign(campaign.metaCampaignId, campaign.adAccount.accessToken);
+        } catch (e) {
+          // Already gone on Meta's side (deleted in Ads Manager) — still
+          // remove the local record so the UI doesn't desync.
+          const msg = e instanceof Error ? e.message : "";
+          if (!/not exist|not found|does not exist|\(code 100\)/i.test(msg)) throw e;
+        }
       }
       await prisma.campaign.delete({ where: { id: campaign.id } });
       return json({ ok: true, deleted: true });
     }
-    await toggleCampaign(campaign.metaCampaignId, campaign.adAccount.accessToken, activate);
+    try {
+      await toggleCampaign(campaign.metaCampaignId, campaign.adAccount.accessToken, activate);
+    } catch (e) {
+      // Gone on Meta's side — mark it instead of leaving a stale "active".
+      const msg = e instanceof Error ? e.message : "";
+      if (/not exist|not found|does not exist|\(code 100\)/i.test(msg)) {
+        await prisma.campaign.update({
+          where: { id: campaign.id },
+          data: { status: "failed", error: "This campaign no longer exists in Meta Ads Manager." },
+        });
+        return json({ ok: false, error: "Campaign no longer exists on Meta — marked as failed." });
+      }
+      throw e;
+    }
     await prisma.campaign.update({
       where: { id: campaign.id },
       data: { status: activate ? "active" : "paused" },
@@ -167,6 +289,21 @@ export default function Campaigns() {
   } = useLoaderData<typeof loader>();
   const [params] = useSearchParams();
   const submit = useSubmit();
+  const funnelRetry = useFetcher();
+
+  const retryStandalone = (id: string) => {
+    const data = new FormData();
+    data.set("intent", "retry");
+    data.set("campaignId", id);
+    submit(data, { method: "post" });
+  };
+
+  const retryFunnel = (funnelId: string) => {
+    const data = new FormData();
+    data.set("intent", "retry_failed");
+    data.set("funnelId", funnelId);
+    funnelRetry.submit(data, { method: "post", action: "/app/ads/funnel" });
+  };
   const nav = useNavigation();
   const busy = nav.state === "submitting";
   const [analyzing, setAnalyzing] = useState<string | null>(null);
@@ -277,6 +414,26 @@ export default function Campaigns() {
           Delete
         </Button>
       )}
+      {c.status === "failed" && c.funnelGroupId && (
+        <Button
+          size="slim"
+          disabled={busy || funnelRetry.state === "submitting"}
+          loading={funnelRetry.state === "submitting"}
+          onClick={() => retryFunnel(c.funnelGroupId!)}
+        >
+          ↻ Retry funnel
+        </Button>
+      )}
+      {c.status === "failed" && !c.funnelGroupId && (
+        <Button size="slim" disabled={busy} onClick={() => retryStandalone(c.id)}>
+          ↻ Retry publish
+        </Button>
+      )}
+      {c.status === "draft" && (
+        <Button size="slim" variant="plain" url={`/app/ads/create?edit=${c.id}`}>
+          Edit
+        </Button>
+      )}
       <Button
         size="slim"
         variant="plain"
@@ -314,6 +471,9 @@ export default function Campaigns() {
       title="Campaigns"
       backAction={{ url: "/app/ads" }}
       primaryAction={{ content: "Create campaign", url: "/app/ads/create" }}
+      secondaryActions={[
+        { content: "↻ Refresh from Meta", url: "/app/ads/campaigns?refresh=1" },
+      ]}
     >
       <BlockStack gap="500">
         <Anim index={0}>

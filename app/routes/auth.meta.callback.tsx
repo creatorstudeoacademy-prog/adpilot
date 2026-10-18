@@ -3,6 +3,7 @@ import { json } from "@remix-run/node";
 import { useLoaderData } from "@remix-run/react";
 
 import { verifyMetaState } from "../lib/meta-oauth.server";
+import { encryptToken } from "../lib/token-vault.server";
 import prisma from "../db.server";
 
 interface TokenResponse {
@@ -113,8 +114,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // (ad accounts). Page tokens cannot call /me/adaccounts.
   await prisma.metaUserToken.upsert({
     where: { shop },
-    update: { accessToken: userToken },
-    create: { shop, accessToken: userToken },
+    update: { accessToken: encryptToken(userToken) },
+    create: { shop, accessToken: encryptToken(userToken) },
   });
 
   // 4. Store each Page.
@@ -124,7 +125,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       where: { shop_pageId: { shop, pageId: page.id } },
       update: {
         pageName: page.name,
-        accessToken: page.access_token,
+        accessToken: encryptToken(page.access_token),
         instagramId: page.instagram_business_account?.id ?? null,
       },
       create: {
@@ -132,7 +133,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         platform: "facebook",
         pageId: page.id,
         pageName: page.name,
-        accessToken: page.access_token,
+        accessToken: encryptToken(page.access_token),
         instagramId: page.instagram_business_account?.id ?? null,
       },
     });
@@ -148,7 +149,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         },
         update: {
           pageName: `${page.name} (Instagram)`,
-          accessToken: page.access_token,
+          accessToken: encryptToken(page.access_token),
           instagramId: page.instagram_business_account.id,
         },
         create: {
@@ -156,7 +157,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           platform: "instagram",
           pageId: `ig_${page.instagram_business_account.id}`,
           pageName: `${page.name} (Instagram)`,
-          accessToken: page.access_token,
+          accessToken: encryptToken(page.access_token),
           instagramId: page.instagram_business_account.id,
         },
       });

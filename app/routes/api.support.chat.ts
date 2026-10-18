@@ -67,6 +67,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
+  const { checkRateLimit, rateLimitMessage } = await import("../lib/rate-limit.server");
+  const rl = await checkRateLimit(shop, "support_chat");
+  if (!rl.ok) {
+    return json({ ok: false, error: rateLimitMessage("support_chat", rl.limit) }, { status: 429 });
+  }
+
   let body: { message?: unknown; history?: unknown } = {};
   try {
     body = (await request.json()) as typeof body;

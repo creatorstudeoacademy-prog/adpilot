@@ -28,11 +28,13 @@ import prisma from "../db.server";
 import { createMetaConnectParams } from "../lib/meta-oauth.server";
 import { NavButton } from "../components/NavButton";
 import { listAdAccounts } from "../lib/meta-ads.server";
+import { decryptToken, encryptToken } from "../lib/token-vault.server";
 import { Anim, Hero } from "../components/ui";
 
 const GRAPH_VERSION = "v21.0";
 
 async function fetchPageFollowers(pageId: string, token: string): Promise<number | null> {
+  token = decryptToken(token);
   try {
     const res = await fetch(
       `https://graph.facebook.com/${GRAPH_VERSION}/${pageId}?fields=followers_count&access_token=${token}`,
@@ -45,6 +47,7 @@ async function fetchPageFollowers(pageId: string, token: string): Promise<number
 }
 
 async function fetchAdSpend(adAccountId: string, token: string): Promise<number | null> {
+  token = decryptToken(token);
   try {
     const res = await fetch(
       `https://graph.facebook.com/${GRAPH_VERSION}/act_${adAccountId}/insights?fields=spend&date_preset=last_30d&access_token=${token}`,
@@ -86,8 +89,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     adAccounts.map((a) => fetchAdSpend(a.adAccountId, a.accessToken)),
   );
 
-  // Discover ad accounts available via the user token (inline connect —
-  // no navigation needed). Best-effort: never break the page.
+  // Map ad account -> Business Manager name (best-effort, one API call).
+  const businessByAdAccount = new Map<string, string>();
+  if (userToken?.accessToken) {
+    try {
+      const { decryptToken } = await import("../lib/token-vault.server");
+      const bRes = await fetch(
+        `https://graph.facebook.com/${GRAPH_VERSION}/me/businesses?fields=id,name,owned_ad_accounts{id}&access_token=${decryptToken(userToken.accessToken)}`,
+      );
+      const bData = (await bRes.json()) as {
+        data?: Array<{ name?: string; owned_ad_accounts?: { data?: Array<{ id?: string }> } }>;
+      };
+      for (const b of bData?.data ?? []) {
+        for (const aa of b?.owned_ad_accounts?.data ?? []) {
+          if (aa?.id) businessByAdAccount.set(String(aa.id).replace("act_", ""), b.name ?? "");
+        }
+      }
+    } catch {
+      // best-effort: page still renders without BM labels
+    }
+  }
   let availableAdAccounts: Array<{ id: string; name: string; currency: string }> = [];
   let adAccountsError: string | null = null;
   if (userToken?.accessToken) {
@@ -133,6 +154,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       adAccountId: a.adAccountId,
       currency: a.currency,
       pixelId: a.pixelId,
+      businessName: businessByAdAccount.get(a.adAccountId) ?? null,
       spend30d: spendResults[i].status === "fulfilled" ? spendResults[i].value : null,
       createdAt: a.createdAt.toISOString(),
     })),
@@ -236,8 +258,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
     await prisma.metaUserToken.upsert({
       where: { shop },
-      create: { shop, accessToken: token },
-      update: { accessToken: token },
+      create: { shop, accessToken: encryptToken(token) },
+      update: { accessToken: encryptToken(token) },
     });
     return json({ ok: true, message: "Token saved. You can now connect ad accounts." });
   }
@@ -711,7 +733,7 @@ export default function AccountsPage() {
                         <BlockStack key={a.id} gap="200">
                           <AccountCard
                             title={a.adAccountName}
-                            subtitle={`Ad account ${a.adAccountId} · ${a.currency}`}
+                            subtitle={`Ad account ${a.adAccountId} · ${a.currency}${a.businessName ? ` · ${a.businessName}` : ""}`}
                             stats={
                               a.spend30d != null
                                 ? `$${a.spend30d.toFixed(2)} spend (30d)`

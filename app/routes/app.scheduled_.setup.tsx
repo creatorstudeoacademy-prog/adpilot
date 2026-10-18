@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { useLoaderData, useNavigate } from "@remix-run/react";
@@ -149,6 +149,9 @@ export default function ScheduleSetup() {
     }
   };
 
+  // Idempotency key: stable across retries of the same draft batch, so a
+  // double-click can never double-charge.
+  const idemKeyRef = useRef<string>("");
   const approve = async () => {
     const valid = drafts.filter((d) => d.content.trim());
     if (valid.length === 0) {
@@ -158,10 +161,16 @@ export default function ScheduleSetup() {
     setError(null);
     setBusy(true);
     try {
+      if (!idemKeyRef.current) {
+        idemKeyRef.current =
+          typeof crypto !== "undefined" && "randomUUID" in crypto
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      }
       const res = await fetch("/api/schedule/approve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ packageId, accountId, posts: valid }),
+        body: JSON.stringify({ packageId, accountId, posts: valid, idempotencyKey: idemKeyRef.current }),
       });
       const data = (await res.json()) as { ok: boolean; message?: string };
       if (data.ok) {
@@ -388,7 +397,7 @@ export default function ScheduleSetup() {
                   autoComplete="off"
                 />
                 <TextField
-                  label="Post time (each day)"
+                  label="Post time (each day, UTC)"
                   type="time"
                   value={postTime}
                   onChange={setPostTime}
