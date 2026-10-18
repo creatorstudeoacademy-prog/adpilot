@@ -362,7 +362,7 @@ function PixelCard({
       const data = new FormData();
       data.set("intent", "fetch_pixels");
       data.set("id", adAccountId);
-      const res = await fetch(window.location.pathname, {
+      const res = await fetch("/app/accounts", {
         method: "POST",
         body: data,
       });
