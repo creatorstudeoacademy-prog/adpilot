@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Badge, Banner, BlockStack, Button, Card, InlineStack, Text } from "@shopify/polaris";
 
 interface Strategy {
@@ -53,8 +53,22 @@ function parseStrategy(raw: string): Strategy | null {
 }
 
 function ScoreRing({ score }: { score: number }) {
-  const pct = Math.max(0, Math.min(100, Math.round(score)));
-  const color = pct >= 70 ? "#108043" : pct >= 40 ? "#b98900" : "#bf0711";
+  const target = Math.max(0, Math.min(100, Math.round(score)));
+  const [pct, setPct] = useState(0);
+  useEffect(() => {
+    let raf = 0;
+    const t0 = performance.now();
+    const dur = 1200;
+    const step = (now: number) => {
+      const p = Math.min(1, (now - t0) / dur);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setPct(Math.round(target * eased));
+      if (p < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target]);
+  const color = target >= 70 ? "#108043" : target >= 40 ? "#b98900" : "#bf0711";
   return (
     <div
       style={{
@@ -87,16 +101,109 @@ function ScoreRing({ score }: { score: number }) {
   );
 }
 
+/** Animated horizontal bar chart (pure CSS, no library). */
+function BarChart({ rows, currency }: { rows: ChartRow[]; currency: string }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setMounted(true), 60);
+    return () => clearTimeout(t);
+  }, []);
+  const max = Math.max(1, ...rows.map((r) => r.spend));
+  if (rows.length === 0) {
+    return (
+      <Text as="p" variant="bodySm" tone="subdued">
+        No spend data for this breakdown.
+      </Text>
+    );
+  }
+  return (
+    <BlockStack gap="150">
+      {rows.map((r, i) => (
+        <div key={i} className="ap-anim-up" style={{ animationDelay: `${i * 0.08}s` }}>
+          <InlineStack gap="200" blockAlign="center">
+            <div style={{ width: 110, flexShrink: 0 }}>
+              <Text as="p" variant="bodySm" fontWeight="semibold">
+                {r.label}
+              </Text>
+            </div>
+            <div style={{ flex: 1, height: 22, background: "#f1f1f4", borderRadius: 11, overflow: "hidden" }}>
+              <div
+                style={{
+                  height: "100%",
+                  width: mounted ? `${Math.max(4, (r.spend / max) * 100)}%` : "0%",
+                  borderRadius: 11,
+                  background:
+                    r.cpp != null && r.cpp > 0
+                      ? "linear-gradient(90deg, #5c6ac4, #9c6ade)"
+                      : "linear-gradient(90deg, #d2d5d9, #e9ebee)",
+                  transition: "width 0.9s cubic-bezier(0.22, 1, 0.36, 1)",
+                }}
+              />
+            </div>
+            <div style={{ width: 150, flexShrink: 0, textAlign: "right" }}>
+              <Text as="p" variant="bodySm">
+                {currency} {r.spend.toFixed(2)}
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                {r.purchases} purch{r.purchases === 1 ? "" : "s"}
+                {r.cpp != null ? ` · ${currency} ${r.cpp.toFixed(2)}/ea` : ""}
+              </Text>
+            </div>
+          </InlineStack>
+        </div>
+      ))}
+    </BlockStack>
+  );
+}
+
+/** KPI stat card with count-up feel. */
+function KpiCard({ label, value, sub, delay }: { label: string; value: string; sub?: string; delay: number }) {
+  return (
+    <div className="ap-anim-up" style={{ flex: 1, animationDelay: `${delay}s` }}>
+      <Card>
+        <BlockStack gap="100">
+          <Text as="p" variant="bodySm" tone="subdued">
+            {label}
+          </Text>
+          <Text as="p" variant="headingLg">
+            {value}
+          </Text>
+          {sub && (
+            <Text as="p" variant="bodySm" tone="subdued">
+              {sub}
+            </Text>
+          )}
+        </BlockStack>
+      </Card>
+    </div>
+  );
+}
+
 /**
  * The Ad Strategy bar: analyzes 30 days of ad account data and
  * produces a concrete sales strategy (audience, placements, budget,
  * creative) — then one click applies it to a new campaign.
  */
+interface ChartRow {
+  label: string;
+  spend: number;
+  purchases: number;
+  ctr: number;
+  cpp: number | null;
+}
+interface ChartData {
+  totals: { spend: number; impressions: number; clicks: number; purchases: number; ctr: number; currency: string };
+  byCountry: ChartRow[];
+  byAgeGender: ChartRow[];
+  byPlatform: ChartRow[];
+}
+
 export default function StrategyBar() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [raw, setRaw] = useState<string | null>(null);
   const [accountName, setAccountName] = useState<string>("");
+  const [chartData, setChartData] = useState<ChartData | null>(null);
 
   const strategy = raw ? parseStrategy(raw) : null;
   const parseFailed = raw !== null && strategy === null;
@@ -106,6 +213,7 @@ export default function StrategyBar() {
     setBusy(true);
     setError(null);
     setRaw(null);
+    setChartData(null);
     try {
       const res = await fetch("/api/ads/strategy", {
         method: "POST",
@@ -117,10 +225,12 @@ export default function StrategyBar() {
         message?: string;
         strategy?: string;
         accountName?: string;
+        chartData?: ChartData;
       };
       if (!data.ok) throw new Error(data.message ?? "Analysis failed.");
       setRaw(data.strategy ?? "");
       setAccountName(data.accountName ?? "");
+      setChartData(data.chartData ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Analysis failed.");
     } finally {
@@ -204,6 +314,58 @@ export default function StrategyBar() {
                 </InlineStack>
               </div>
             </InlineStack>
+
+            {chartData && (
+              <BlockStack gap="200">
+                <InlineStack gap="200">
+                  <KpiCard
+                    label="💸 30-day spend"
+                    value={`${chartData.totals.currency} ${chartData.totals.spend.toFixed(2)}`}
+                    delay={0}
+                  />
+                  <KpiCard
+                    label="🛒 Purchases"
+                    value={String(chartData.totals.purchases)}
+                    sub={
+                      chartData.totals.purchases > 0
+                        ? `${chartData.totals.currency} ${(chartData.totals.spend / chartData.totals.purchases).toFixed(2)} per purchase`
+                        : "no purchases yet"
+                    }
+                    delay={0.08}
+                  />
+                  <KpiCard
+                    label="👁️ Impressions"
+                    value={chartData.totals.impressions.toLocaleString()}
+                    sub={`${chartData.totals.ctr}% CTR`}
+                    delay={0.16}
+                  />
+                </InlineStack>
+                {chartData.byCountry.length > 0 && (
+                  <BlockStack gap="100">
+                    <Text as="p" variant="bodySm" fontWeight="semibold">
+                      🌍 Spend by country
+                    </Text>
+                    <BarChart rows={chartData.byCountry} currency={chartData.totals.currency} />
+                  </BlockStack>
+                )}
+                {chartData.byAgeGender.length > 0 && (
+                  <BlockStack gap="100">
+                    <Text as="p" variant="bodySm" fontWeight="semibold">
+                      👥 Spend by age & gender
+                    </Text>
+                    <BarChart rows={chartData.byAgeGender} currency={chartData.totals.currency} />
+                  </BlockStack>
+                )}
+                {chartData.byPlatform.length > 0 && (
+                  <BlockStack gap="100">
+                    <Text as="p" variant="bodySm" fontWeight="semibold">
+                      📱 Spend by placement
+                    </Text>
+                    <BarChart rows={chartData.byPlatform} currency={chartData.totals.currency} />
+                  </BlockStack>
+                )}
+              </BlockStack>
+            )}
 
             <InlineStack gap="300" wrap={false}>
               <div style={{ flex: 1 }}>

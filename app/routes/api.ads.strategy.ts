@@ -215,6 +215,53 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       })
       .join("\n");
 
+  // Chart data for the animated report UI.
+  const toChartRows = (rows: InsightsRow[], label: (r: InsightsRow) => string) =>
+    rows
+      .map((r) => {
+        const spend = parseFloat(r.spend ?? "0") || 0;
+        const { purchases } = sumPurchases(r);
+        const clicks = parseInt(String(r.clicks ?? "0"), 10) || 0;
+        const impressions = parseInt(String(r.impressions ?? "0"), 10) || 0;
+        return {
+          label: label(r),
+          spend: Math.round(spend * 100) / 100,
+          purchases,
+          ctr: impressions > 0 ? Math.round((clicks / impressions) * 1000) / 10 : 0,
+          cpp: purchases > 0 ? Math.round((spend / purchases) * 100) / 100 : null,
+        };
+      })
+      .filter((r) => r.spend > 0)
+      .sort((a, b) => b.spend - a.spend)
+      .slice(0, 6);
+  const chartData = {
+    totals: {
+      spend: Math.round(spend * 100) / 100,
+      impressions,
+      clicks,
+      purchases,
+      ctr: impressions > 0 ? Math.round((clicks / impressions) * 1000) / 10 : 0,
+      currency: adAccount.currency ?? "USD",
+    },
+    byCountry: toChartRows(byCountry, (r) => String(r.country ?? "?").toUpperCase()),
+    byAgeGender: toChartRows(
+      byAgeGender,
+      (r) => `${r.age ?? "?"} ${r.gender === "male" ? "♂" : r.gender === "female" ? "♀" : ""}`.trim(),
+    ),
+    byPlatform: toChartRows(byPlatform, (r) => {
+      const pf = String(r.publisher_platform ?? "?");
+      return pf === "facebook"
+        ? "Facebook"
+        : pf === "instagram"
+          ? "Instagram"
+          : pf === "audience_network"
+            ? "Audience Network"
+            : pf === "messenger"
+              ? "Messenger"
+              : pf;
+    }),
+  };
+
   const systemPrompt = `You are a senior Meta ads media buyer with 10 years of experience scaling e-commerce brands. You have been handed the merchant's TOTAL business picture — not just ad numbers, but their Facebook Page (social proof), their product catalog (what they sell and at what price), their pixel health (tracking quality), and 30 days of ad performance.
 
 Do a deep expert analysis like you would for a paying client:
@@ -306,7 +353,12 @@ Rules:
         detail: `AI strategy generated for ${adAccount.adAccountName}`,
       },
     });
-    return json({ ok: true, strategy: text.trim(), accountName: adAccount.adAccountName });
+    return json({
+      ok: true,
+      strategy: text.trim(),
+      accountName: adAccount.adAccountName,
+      chartData,
+    });
   } catch (e) {
     return json(
       { ok: false, message: e instanceof Error ? e.message : "Strategy generation failed." },
