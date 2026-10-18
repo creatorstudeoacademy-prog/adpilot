@@ -6,6 +6,7 @@ export const OBJECTIVE_MAP: Record<string, string> = {
   TRAFFIC: "OUTCOME_TRAFFIC",
   ENGAGEMENT: "OUTCOME_ENGAGEMENT",
   SALES: "OUTCOME_SALES",
+  CATALOG_SALES: "OUTCOME_SALES",
 };
 
 export const OBJECTIVES = [
@@ -28,5 +29,10 @@ export const OBJECTIVES = [
     id: "SALES",
     name: "Sales",
     description: "Find people likely to purchase your products.",
+  },
+  {
+    id: "CATALOG_SALES",
+    name: "Catalog Sales",
+    description: "Dynamic ads from your product catalog — Meta shows the right product to each person.",
   },
 ];

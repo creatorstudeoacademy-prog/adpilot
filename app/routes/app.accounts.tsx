@@ -30,6 +30,7 @@ import { NavButton } from "../components/NavButton";
 import { listAdAccounts } from "../lib/meta-ads.server";
 import { decryptToken, encryptToken } from "../lib/token-vault.server";
 import { Anim, Hero } from "../components/ui";
+import CampaignAnalysis from "../components/CampaignAnalysis";
 
 const GRAPH_VERSION = "v21.0";
 
@@ -464,6 +465,307 @@ function BusinessManagerSection({ hasUserToken }: { hasUserToken: boolean }) {
               </div>
             </InlineStack>
           ))}
+          {health && (
+            <BlockStack gap="200">
+              <InlineStack align="space-between" blockAlign="center">
+                <Text as="p" variant="bodyMd" fontWeight="semibold">
+                  Business Manager health report
+                </Text>
+                <Button variant="plain" size="slim" onClick={() => setHealth(null)}>
+                  Close
+                </Button>
+              </InlineStack>
+              <CampaignAnalysis raw={health.text} campaignName={health.name} />
+            </BlockStack>
+          )}
+        </BlockStack>
+      </Card>
+    </div>
+  );
+}
+
+
+function CatalogSection() {
+  const [catalogs, setCatalogs] = useState<
+    Array<{ catalogId: string; name: string; connected: boolean; isActive: boolean }>
+  >([]);
+  const [businessName, setBusinessName] = useState<string | null>(null);
+  const [needsBusiness, setNeedsBusiness] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [newName, setNewName] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [syncPreview, setSyncPreview] = useState<{
+    productCount: number;
+    variantCount: number;
+    catalogName: string;
+    sample: Array<{ title: string; price: string; variants: number }>;
+  } | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/ads/catalog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "list" }),
+      });
+      const data = (await res.json()) as {
+        ok: boolean;
+        message?: string;
+        needsBusiness?: boolean;
+        businessName?: string;
+        catalogs?: Array<{ catalogId: string; name: string; connected: boolean; isActive: boolean }>;
+      };
+      if (!data.ok) throw new Error(data.message ?? "Could not load catalogs.");
+      setCatalogs(data.catalogs ?? []);
+      setBusinessName(data.businessName ?? null);
+      setNeedsBusiness(!!data.needsBusiness);
+      setLoaded(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not load catalogs.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const act = async (action: string, catalogId?: string, name?: string) => {
+    setError(null);
+    setBusyId(catalogId ?? action);
+    try {
+      const res = await fetch("/api/ads/catalog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, catalogId, name }),
+      });
+      const data = (await res.json()) as { ok: boolean; message?: string };
+      if (!data.ok) throw new Error(data.message ?? "Request failed.");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Request failed.");
+    } finally {
+      setBusyId(null);
+      setCreating(false);
+    }
+  };
+
+  const syncProducts = async (confirmed: boolean) => {
+    setError(null);
+    setSyncResult(null);
+    setSyncing(true);
+    try {
+      const res = await fetch("/api/ads/catalog-sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: confirmed ? "sync" : "preview" }),
+      });
+      const data = (await res.json()) as {
+        ok: boolean;
+        message?: string;
+        productCount?: number;
+        variantCount?: number;
+        catalogName?: string;
+        sample?: Array<{ title: string; price: string; variants: number }>;
+      };
+      if (!data.ok) throw new Error(data.message ?? "Sync failed.");
+      if (confirmed) {
+        setSyncPreview(null);
+        setSyncResult(data.message ?? "Sync complete.");
+      } else {
+        setSyncPreview({
+          productCount: data.productCount ?? 0,
+          variantCount: data.variantCount ?? 0,
+          catalogName: data.catalogName ?? "",
+          sample: data.sample ?? [],
+        });
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Sync failed.");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  return (
+    <div className="ap-card-hover">
+      <Card>
+        <BlockStack gap="200">
+          <InlineStack gap="200" blockAlign="center">
+            <Text as="h2" variant="headingMd">
+              Product Catalogs
+            </Text>
+            <div style={{ marginLeft: "auto" }}>
+              <Button size="slim" disabled={loading} loading={loading} onClick={() => void load()}>
+                {loaded ? "Refresh" : "Load catalogs"}
+              </Button>
+            </div>
+          </InlineStack>
+          <Text as="p" variant="bodySm" tone="subdued">
+            Connect a catalog to run Catalog Sales ads and create posts straight
+            from your products.
+            {businessName ? ` Showing catalogs from ${businessName}.` : ""}
+          </Text>
+          {error && (
+            <Text as="p" variant="bodySm" tone="critical">
+              {error}
+            </Text>
+          )}
+          {loaded && needsBusiness && catalogs.length === 0 && (
+            <Text as="p" variant="bodySm" tone="subdued">
+              Connect a Business Manager above first to browse its catalogs.
+            </Text>
+          )}
+          {loaded && !needsBusiness && catalogs.length === 0 && !error && (
+            <Text as="p" variant="bodySm" tone="subdued">
+              No catalogs in this Business Manager yet — create one below.
+            </Text>
+          )}
+          {catalogs.map((c) => (
+            <InlineStack key={c.catalogId} gap="200" blockAlign="center">
+              <BlockStack gap="050">
+                <InlineStack gap="200" blockAlign="center">
+                  <Text as="p" variant="bodyMd" fontWeight="semibold">
+                    {c.name}
+                  </Text>
+                  {c.isActive && <Badge tone="success">Active</Badge>}
+                  {c.connected && !c.isActive && <Badge>Connected</Badge>}
+                </InlineStack>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  ID: {c.catalogId}
+                </Text>
+              </BlockStack>
+              <div style={{ marginLeft: "auto" }}>
+                <InlineStack gap="200">
+                  {!c.connected && (
+                    <Button
+                      size="slim"
+                      loading={busyId === c.catalogId}
+                      disabled={busyId !== null}
+                      onClick={() => void act("connect", c.catalogId, c.name)}
+                    >
+                      Connect
+                    </Button>
+                  )}
+                  {c.connected && !c.isActive && (
+                    <Button
+                      size="slim"
+                      loading={busyId === c.catalogId}
+                      disabled={busyId !== null}
+                      onClick={() => void act("set-active", c.catalogId)}
+                    >
+                      Set active
+                    </Button>
+                  )}
+                  {c.connected && (
+                    <Button
+                      size="slim"
+                      variant="plain"
+                      tone="critical"
+                      disabled={busyId !== null}
+                      onClick={() => void act("disconnect", c.catalogId)}
+                    >
+                      Disconnect
+                    </Button>
+                  )}
+                </InlineStack>
+              </div>
+            </InlineStack>
+          ))}
+          {loaded && !needsBusiness && (
+            <BlockStack gap="100">
+              {!creating ? (
+                <div>
+                  <Button size="slim" variant="plain" onClick={() => setCreating(true)}>
+                    + Create new catalog
+                  </Button>
+                </div>
+              ) : (
+                <InlineStack gap="200" blockAlign="end">
+                  <div style={{ flexGrow: 1 }}>
+                    <TextField
+                      label="Catalog name"
+                      value={newName}
+                      onChange={setNewName}
+                      placeholder="e.g. My Store Catalog"
+                      autoComplete="off"
+                    />
+                  </div>
+                  <Button
+                    size="slim"
+                    variant="primary"
+                    loading={busyId === "create"}
+                    disabled={busyId !== null || !newName.trim()}
+                    onClick={() => void act("create", undefined, newName.trim())}
+                  >
+                    Create & connect
+                  </Button>
+                  <Button size="slim" variant="plain" onClick={() => setCreating(false)}>
+                    Cancel
+                  </Button>
+                </InlineStack>
+              )}
+            </BlockStack>
+          )}
+          {/* Shopify -> Meta catalog sync */}
+          {loaded && catalogs.some((c) => c.isActive) && (
+            <BlockStack gap="150">
+              <InlineStack gap="200" blockAlign="center">
+                <Text as="p" variant="bodyMd" fontWeight="semibold">
+                  🔄 Sync store products
+                </Text>
+                <div style={{ marginLeft: "auto" }}>
+                  <Button
+                    size="slim"
+                    loading={syncing}
+                    disabled={syncing}
+                    onClick={() => void syncProducts(false)}
+                  >
+                    Preview sync
+                  </Button>
+                </div>
+              </InlineStack>
+              <Text as="p" variant="bodySm" tone="subdued">
+                Push your Shopify products into the active catalog so Catalog
+                Sales ads and pixel events use the same product IDs.
+              </Text>
+              {syncPreview && (
+                <BlockStack gap="100">
+                  <Text as="p" variant="bodySm">
+                    Found <strong>{syncPreview.productCount} products</strong> (
+                    {syncPreview.variantCount} variants) to sync into "
+                    {syncPreview.catalogName}".
+                  </Text>
+                  {syncPreview.sample.map((sp, i) => (
+                    <Text key={i} variant="bodySm" tone="subdued">
+                      • {sp.title} — {sp.price} ({sp.variants} variant
+                      {sp.variants === 1 ? "" : "s"})
+                    </Text>
+                  ))}
+                  <div>
+                    <Button
+                      size="slim"
+                      variant="primary"
+                      loading={syncing}
+                      disabled={syncing}
+                      onClick={() => void syncProducts(true)}
+                    >
+                      Sync {syncPreview.variantCount} items now
+                    </Button>
+                  </div>
+                </BlockStack>
+              )}
+              {syncResult && (
+                <Text as="p" variant="bodySm" tone="success">
+                  ✓ {syncResult}
+                </Text>
+              )}
+            </BlockStack>
+          )}
         </BlockStack>
       </Card>
     </div>
@@ -484,6 +786,12 @@ function PixelCard({
   const [pixelSource, setPixelSource] = useState<string | null>(null);
   const [fetching, setFetching] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [health, setHealth] = useState<{ text: string; name?: string } | null>(null);
+  const [healthBusy, setHealthBusy] = useState(false);
+  const [testEvent, setTestEvent] = useState("PageView");
+  const [testBusy, setTestBusy] = useState(false);
+  const [testMsg, setTestMsg] = useState<string | null>(null);
+  const [testOk, setTestOk] = useState(false);
   const submit = useSubmit();
   const save = () => {
     const data = new FormData();
@@ -521,6 +829,48 @@ function PixelCard({
       setFetchError(e instanceof Error ? e.message : "Failed to fetch pixels.");
     } finally {
       setFetching(false);
+    }
+  };
+  const checkHealth = async () => {
+    const id = pixelId.trim();
+    if (!id || healthBusy) return;
+    setHealthBusy(true);
+    setHealth(null);
+    try {
+      const res = await fetch("/api/ads/pixel-health", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pixelId: id }),
+      });
+      const data = (await res.json()) as { ok: boolean; message?: string; analysis?: string; pixel?: { name?: string | null } };
+      if (!data.ok) throw new Error(data.message ?? "Health check failed.");
+      setHealth({ text: data.analysis ?? "", name: data.pixel?.name ?? id });
+    } catch (e) {
+      setFetchError(e instanceof Error ? e.message : "Health check failed.");
+    } finally {
+      setHealthBusy(false);
+    }
+  };
+  const sendTestEvent = async () => {
+    const id = pixelId.trim();
+    if (!id || testBusy) return;
+    setTestBusy(true);
+    setTestMsg(null);
+    try {
+      const res = await fetch("/api/pixel/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pixelId: id, eventName: testEvent }),
+      });
+      const data = (await res.json()) as { ok: boolean; error?: string; message?: string };
+      if (!data.ok) throw new Error(data.error ?? "Test event failed.");
+      setTestOk(true);
+      setTestMsg(data.message ?? "Test event sent.");
+    } catch (e) {
+      setTestOk(false);
+      setTestMsg(e instanceof Error ? e.message : "Test event failed.");
+    } finally {
+      setTestBusy(false);
     }
   };
   return (
@@ -603,6 +953,69 @@ function PixelCard({
             ✓ Pixel {currentPixelId} connected
           </Text>
         )}
+        {/* Pixel health + live event tester */}
+        <BlockStack gap="200">
+          <InlineStack gap="200" blockAlign="center">
+            <Text as="p" variant="bodyMd" fontWeight="semibold">
+              Pixel tools
+            </Text>
+            <div style={{ marginLeft: "auto" }}>
+              <InlineStack gap="200">
+                <Button
+                  size="slim"
+                  disabled={!pixelId.trim() || healthBusy}
+                  loading={healthBusy}
+                  onClick={() => void checkHealth()}
+                >
+                  🩺 Health check
+                </Button>
+              </InlineStack>
+            </div>
+          </InlineStack>
+          <InlineStack gap="200" blockAlign="end">
+            <div style={{ minWidth: 180 }}>
+              <Select
+                label="Test event"
+                options={[
+                  { label: "PageView", value: "PageView" },
+                  { label: "ViewContent", value: "ViewContent" },
+                  { label: "AddToCart", value: "AddToCart" },
+                  { label: "InitiateCheckout", value: "InitiateCheckout" },
+                  { label: "Purchase", value: "Purchase" },
+                  { label: "Lead", value: "Lead" },
+                ]}
+                value={testEvent}
+                onChange={setTestEvent}
+              />
+            </div>
+            <Button
+              size="slim"
+              disabled={!pixelId.trim() || testBusy}
+              loading={testBusy}
+              onClick={() => void sendTestEvent()}
+            >
+              Send test event
+            </Button>
+          </InlineStack>
+          {testMsg && (
+            <Text as="p" variant="bodySm" tone={testOk ? "success" : "critical"}>
+              {testMsg}
+            </Text>
+          )}
+          {health && (
+            <BlockStack gap="200">
+              <InlineStack align="space-between" blockAlign="center">
+                <Text as="p" variant="bodyMd" fontWeight="semibold">
+                  Pixel health report
+                </Text>
+                <Button variant="plain" size="slim" onClick={() => setHealth(null)}>
+                  Close
+                </Button>
+              </InlineStack>
+              <CampaignAnalysis raw={health.text} campaignName={health.name} />
+            </BlockStack>
+          )}
+        </BlockStack>
       </BlockStack>
     </Card>
     </div>
@@ -884,6 +1297,10 @@ export default function AccountsPage() {
                 </Anim>
 
                 <Anim index={6}>
+                  <CatalogSection />
+                </Anim>
+
+                <Anim index={7}>
                   <BlockStack gap="300">
                     <Text as="h2" variant="headingMd">
                       Ad Accounts ({adAccounts.length})

@@ -74,6 +74,19 @@ model BusinessManager {
   @@unique([shop, businessId])
 }
 
+/// A connected Meta product catalog (for catalog sales ads).
+model ProductCatalog {
+  id         String   @id @default(cuid())
+  shop       String
+  catalogId  String   // Meta catalog ID
+  name       String
+  businessId String?  // owning Business Manager ID
+  isActive   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@unique([shop, catalogId])
+}
+
 /// A social media post — drafted, scheduled, published, or failed.
 model ScheduledPost {
   id              String    @id @default(cuid())
@@ -126,6 +139,8 @@ model FunnelGroup {
   publishFee     Float?
   status         String   @default("draft") // draft | partial | active | failed
   error          String?
+  /// Meta product set ID for catalog-powered BOF stage (optional).
+  catalogProductSetId String?
   createdAt      DateTime @default(now())
 
   campaigns Campaign[]

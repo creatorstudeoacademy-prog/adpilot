@@ -339,6 +339,8 @@ export async function publishFullCampaign(input: {
   creatives: PublishCreativeInput[];
   /** Optional per-ad-set custom targeting (e.g. saved/custom audiences). */
   adSetTargeting?: Record<string, unknown>;
+  /** When set, creatives are built as catalog sales creatives (dynamic product ads). */
+  catalogProductSetId?: string;
 }): Promise<{ campaignId: string; adSetIds: string[]; adIds: string[] }> {
   if (input.adSets.length === 0) throw new Error("At least one ad set is required.");
   if (input.creatives.length === 0) throw new Error("At least one creative is required.");
@@ -370,12 +372,27 @@ export async function publishFullCampaign(input: {
 
     for (let j = 0; j < input.creatives.length; j++) {
       const creative = input.creatives[j];
-      const creativeId = await createAdCreative(
-        input.adAccountId,
-        input.accessToken,
-        `${input.name} - Creative ${j + 1}`,
-        { ...creative, pageId: input.pageId },
-      );
+      const creativeId = input.catalogProductSetId
+        ? await createCatalogAdCreative(
+            input.adAccountId,
+            input.accessToken,
+            `${input.name} - Catalog Creative ${j + 1}`,
+            {
+              productSetId: input.catalogProductSetId,
+              pageId: input.pageId,
+              headline: creative.headline || "{{product.name}}",
+              primaryText: creative.primaryText || "{{product.name}} — {{product.price}}",
+              description: creative.description,
+              link: creative.destinationUrl || undefined,
+              cta: creative.cta || undefined,
+            },
+          )
+        : await createAdCreative(
+            input.adAccountId,
+            input.accessToken,
+            `${input.name} - Creative ${j + 1}`,
+            { ...creative, pageId: input.pageId },
+          );
       const adId = await createAd(
         input.adAccountId,
         input.accessToken,
@@ -891,6 +908,8 @@ export interface CreateFullFunnelInput {
   cta?: string;
   /** Retry mode: only build these stages (skips the rest entirely). */
   onlyStages?: Array<"TOF" | "MOF" | "BOF">;
+  /** When set, the BOF (Sales) stage becomes a dynamic catalog sales ad. */
+  catalogProductSetId?: string;
 }
 
 /**
@@ -1051,20 +1070,31 @@ export async function createFullFunnel(
       );
       res.adSetId = adSetId;
 
-      const creativeId = await createAdCreative(
-        adAccountId,
-        accessToken,
-        `${campaignName} - Creative`,
-        {
-          imageUrl: input.imageUrl,
-          headline: input.headline,
-          primaryText: input.primaryText,
-          description: input.description,
-          destinationUrl: input.destinationUrl,
-          cta: input.cta,
-          pageId: input.pageId,
-        },
-      );
+      const useCatalog = def.stage === "BOF" && !!input.catalogProductSetId;
+      const creativeId = useCatalog
+        ? await createCatalogAdCreative(adAccountId, accessToken, `${campaignName} - Catalog Creative`, {
+            productSetId: input.catalogProductSetId!,
+            pageId: input.pageId,
+            headline: input.headline || "{{product.name}}",
+            primaryText: input.primaryText || "{{product.name}} — {{product.price}}",
+            description: input.description,
+            link: input.destinationUrl || undefined,
+            cta: input.cta || undefined,
+          })
+        : await createAdCreative(
+            adAccountId,
+            accessToken,
+            `${campaignName} - Creative`,
+            {
+              imageUrl: input.imageUrl,
+              headline: input.headline,
+              primaryText: input.primaryText,
+              description: input.description,
+              destinationUrl: input.destinationUrl,
+              cta: input.cta,
+              pageId: input.pageId,
+            },
+          );
       const adId = await createAd(
         adAccountId,
         accessToken,
@@ -1084,4 +1114,149 @@ export async function createFullFunnel(
   }
 
   return { stages };
+}
+
+/* ── Product catalogs ─────────────────────────────────────────────── */
+
+export interface MetaCatalog {
+  id: string;
+  name: string;
+}
+
+/** List product catalogs owned by a Business Manager. */
+export async function listProductCatalogs(
+  businessId: string,
+  accessToken: string,
+): Promise<MetaCatalog[]> {
+  const data = await marketingFetch(
+    `/${businessId}/owned_product_catalogs`,
+    accessToken,
+    { fields: "id,name", limit: "50" },
+    "GET",
+  );
+  return (data.data ?? []) as MetaCatalog[];
+}
+
+/** Create a product catalog under a Business Manager. */
+export async function createProductCatalog(
+  businessId: string,
+  name: string,
+  accessToken: string,
+): Promise<string> {
+  const data = await marketingFetch(`/${businessId}/owned_product_catalogs`, accessToken, {
+    name,
+  });
+  if (!data.id) throw new Error("Meta did not return a catalog ID.");
+  return data.id as string;
+}
+
+export interface MetaCatalogProduct {
+  id: string;
+  name?: string;
+  price?: string;
+  image_url?: string;
+  link?: string;
+  description?: string;
+  availability?: string;
+}
+
+/** List products in a catalog (first 25). */
+export async function listCatalogProducts(
+  catalogId: string,
+  accessToken: string,
+): Promise<MetaCatalogProduct[]> {
+  const data = await marketingFetch(
+    `/${catalogId}/products`,
+    accessToken,
+    { fields: "id,name,price,image_url,link,description,availability", limit: "25" },
+    "GET",
+  );
+  return (data.data ?? []) as MetaCatalogProduct[];
+}
+
+export interface MetaProductSet {
+  id: string;
+  name: string;
+  product_count?: number;
+}
+
+/** List product sets in a catalog (for catalog sales ads). */
+export async function listProductSets(
+  catalogId: string,
+  accessToken: string,
+): Promise<MetaProductSet[]> {
+  const data = await marketingFetch(
+    `/${catalogId}/product_sets`,
+    accessToken,
+    { fields: "id,name,product_count", limit: "50" },
+    "GET",
+  );
+  return (data.data ?? []) as MetaProductSet[];
+}
+
+/* ── Pixel info & health ──────────────────────────────────────────── */
+
+export interface MetaPixelInfo {
+  id: string;
+  name?: string;
+  last_fired_time?: string;
+  creation_time?: string;
+  data_use_setting?: string;
+  code_verification_status?: string;
+}
+
+/** Fetch pixel metadata including last_fired_time (recency = health signal). */
+export async function getPixelInfo(
+  pixelId: string,
+  accessToken: string,
+): Promise<MetaPixelInfo> {
+  const data = await marketingFetch(
+    `/${pixelId}`,
+    accessToken,
+    { fields: "id,name,last_fired_time,creation_time,data_use_setting" },
+    "GET",
+  );
+  return data as MetaPixelInfo;
+}
+
+/* ── Catalog sales ad creative ────────────────────────────────────── */
+
+/**
+ * Create an Advantage+ catalog sales creative: dynamic product template
+ * bound to a product set. Meta fills in product image/name/price per viewer.
+ */
+export async function createCatalogAdCreative(
+  adAccountId: string,
+  accessToken: string,
+  name: string,
+  opts: {
+    productSetId: string;
+    pageId: string;
+    headline: string;
+    primaryText: string;
+    description?: string;
+    link?: string;
+    cta?: string;
+  },
+): Promise<string> {
+  accessToken = decryptToken(accessToken);
+  const objectStorySpec = {
+    page_id: opts.pageId,
+    template_data: {
+      // Dynamic placeholders — Meta renders per-product values.
+      message: opts.primaryText || "{{product.name}} — {{product.price}}",
+      link: opts.link || "{{product.link}}",
+      name: opts.headline || "{{product.name}}",
+      description: opts.description || "{{product.description}}",
+      call_to_action: opts.cta
+        ? { type: opts.cta, value: { link: opts.link || "{{product.link}}" } }
+        : undefined,
+    },
+  };
+  const data = await marketingFetch(`/act_${adAccountId}/adcreatives`, accessToken, {
+    name,
+    product_set_id: opts.productSetId,
+    object_story_spec: JSON.stringify(objectStorySpec),
+  });
+  return data.id as string;
 }

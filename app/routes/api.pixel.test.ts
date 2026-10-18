@@ -7,9 +7,9 @@ import { decryptToken } from "../lib/token-vault.server";
 
 /**
  * POST /api/pixel/test — send a Meta Conversions API test event.
- * Body: { adAccountDbId }
+ * Body: { adAccountDbId, pixelId?, eventName? }
  *
- * Verifies the saved pixel ID actually receives events. The merchant checks
+ * Verifies the pixel actually receives events. The merchant checks
  * Meta Events Manager > Data sources > [pixel] > Test events with the
  * returned test code.
  */
@@ -17,24 +17,34 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  let body: { adAccountDbId?: unknown } = {};
+  let body: { adAccountDbId?: unknown; pixelId?: unknown; eventName?: unknown } = {};
+  const EVENT_NAMES = ["PageView", "ViewContent", "AddToCart", "InitiateCheckout", "Purchase", "Lead"];
   try {
     body = (await request.json()) as typeof body;
   } catch {
     body = {};
   }
-  const adAccount = await prisma.adAccount.findFirst({
-    where: { id: String(body.adAccountDbId ?? ""), shop },
-  });
-  if (!adAccount?.pixelId) {
-    return json({ ok: false, error: "No pixel saved for this ad account." }, { status: 400 });
+  const adAccount = body.adAccountDbId
+    ? await prisma.adAccount.findFirst({ where: { id: String(body.adAccountDbId), shop } })
+    : null;
+  const pixelId = String(body.pixelId ?? "").trim() || adAccount?.pixelId || "";
+  if (!pixelId) {
+    return json({ ok: false, error: "No pixel ID provided or saved." }, { status: 400 });
   }
+  const eventName = EVENT_NAMES.includes(String(body.eventName ?? ""))
+    ? String(body.eventName)
+    : "PageView";
 
   const testCode = `ADPILOT-${Date.now().toString(36).toUpperCase()}`;
-  const token = decryptToken(adAccount.accessToken);
+  const tokenSource = adAccount?.accessToken
+    ? decryptToken(adAccount.accessToken)
+    : decryptToken(
+        (await prisma.metaUserToken.findFirst({ where: { shop }, orderBy: { updatedAt: "desc" } }))?.accessToken ?? "",
+      );
+  const token = tokenSource;
   try {
     const res = await fetch(
-      `https://graph.facebook.com/v21.0/${adAccount.pixelId}/events`,
+      `https://graph.facebook.com/v21.0/${pixelId}/events`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -43,7 +53,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           test_event_code: testCode,
           data: [
             {
-              event_name: "PageView",
+              event_name: eventName,
               event_time: Math.floor(Date.now() / 1000),
               event_source_url: "https://adpilot-test.local/",
               action_source: "website",
@@ -59,7 +69,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({
       ok: true,
       testCode,
-      message: `Test event sent to pixel ${adAccount.pixelId}. Open Meta Events Manager → Data sources → Test events and enter code ${testCode} to verify it arrived.`,
+      message: `Test ${eventName} event sent to pixel ${pixelId}. Open Meta Events Manager → Data sources → Test events and enter code ${testCode} to verify it arrived.`,
     });
   } catch (e) {
     return json(

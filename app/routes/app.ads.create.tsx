@@ -295,6 +295,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   );
 
   try {
+    const catalogProductSetId =
+      objective === "CATALOG_SALES" ? String(form.get("productSetId") ?? "").trim() : "";
+    if (objective === "CATALOG_SALES" && !catalogProductSetId) {
+      return json({ ok: false, error: "Choose a catalog product set for Catalog Sales ads." });
+    }
     const result = await publishFullCampaign({
       adAccountId: adAccount.adAccountId,
       accessToken: adAccount.accessToken,
@@ -309,6 +314,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       })),
       creatives,
       adSetTargeting,
+      ...(catalogProductSetId ? { catalogProductSetId } : {}),
     });
 
     await prisma.campaign.update({
@@ -370,6 +376,31 @@ export default function CreateCampaign() {
 
   const [step, setStep] = useState(1);
   const [objective, setObjective] = useState<string>((d.objective as string) ?? "TRAFFIC");
+  // Catalog sales: product set picker (from the active Meta catalog)
+  const [productSets, setProductSets] = useState<Array<{ id: string; name: string; product_count?: number }>>([]);
+  const [productSetId, setProductSetId] = useState<string>("");
+  const [setsLoading, setSetsLoading] = useState(false);
+  const [setsError, setSetsError] = useState<string | null>(null);
+  const loadProductSets = async () => {
+    if (productSets.length > 0 || setsLoading) return;
+    setSetsLoading(true);
+    setSetsError(null);
+    try {
+      const res = await fetch("/api/ads/catalog-products?catalogId=active&type=sets");
+      const data = (await res.json()) as {
+        ok: boolean;
+        message?: string;
+        sets?: Array<{ id: string; name: string; product_count?: number }>;
+      };
+      if (!data.ok) throw new Error(data.message ?? "Could not load product sets.");
+      setProductSets(data.sets ?? []);
+      if ((data.sets ?? []).length === 1) setProductSetId(data.sets![0].id);
+    } catch (e) {
+      setSetsError(e instanceof Error ? e.message : "Could not load product sets.");
+    } finally {
+      setSetsLoading(false);
+    }
+  };
   const [adAccountDbId, setAdAccountDbId] = useState<string>(
     (d.adAccountDbId as string) ?? adAccounts[0]?.id ?? "",
   );
@@ -527,9 +558,13 @@ export default function CreateCampaign() {
     if (creatives.length > 1) setCreatives((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const creativesValid = creatives.every(
-    (c) => c.headline.trim() && c.primaryText.trim() && c.imageUrl.trim() && c.destinationUrl.trim(),
-  );
+  const isCatalogSales = objective === "CATALOG_SALES";
+  const creativesValid =
+    creatives.every((c) =>
+      isCatalogSales
+        ? c.headline.trim() && c.primaryText.trim()
+        : c.headline.trim() && c.primaryText.trim() && c.imageUrl.trim() && c.destinationUrl.trim(),
+    ) && (!isCatalogSales || !!productSetId);
 
   const publish = () => {
     const data = new FormData();
@@ -542,6 +577,7 @@ export default function CreateCampaign() {
     data.set("endDate", endDate);
     data.set("adSetCount", String(adSetCount));
     data.set("creatives", JSON.stringify(creatives));
+    if (objective === "CATALOG_SALES" && productSetId) data.set("productSetId", productSetId);
     data.set("targetingMode", targetingMode);
     data.set("audienceDbId", audienceDbId);
     data.set("country", country);
@@ -809,6 +845,41 @@ export default function CreateCampaign() {
 
         {step === 3 && (
           <BlockStack gap="400">
+            {isCatalogSales && (
+              <Card>
+                <BlockStack gap="200">
+                  <Text as="h2" variant="headingMd">
+                    🛍️ Catalog product set
+                  </Text>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Meta will dynamically show the right product from this set
+                    to each person. Image and link come from your catalog —
+                    headline and text below are used as the ad template.
+                  </Text>
+                  {setsError && <Banner tone="critical">{setsError}</Banner>}
+                  <Select
+                    label="Product set"
+                    options={[
+                      { label: setsLoading ? "Loading…" : "Choose a product set…", value: "" },
+                      ...productSets.map((ps) => ({
+                        label: `${ps.name}${ps.product_count != null ? ` (${ps.product_count} products)` : ""}`,
+                        value: ps.id,
+                      })),
+                    ]}
+                    value={productSetId}
+                    onChange={setProductSetId}
+                    onFocus={() => void loadProductSets()}
+                  />
+                  {!productSetId && !setsLoading && (
+                    <div>
+                      <Button size="slim" variant="plain" onClick={() => void loadProductSets()}>
+                        Load product sets
+                      </Button>
+                    </div>
+                  )}
+                </BlockStack>
+              </Card>
+            )}
             {aiFillError && <Banner tone="critical">{aiFillError}</Banner>}
             {creatives.map((creative, index) => (
               <Card key={index}>

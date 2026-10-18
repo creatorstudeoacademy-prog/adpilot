@@ -157,6 +157,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         destinationUrl: funnel.destinationUrl ?? ref.destinationUrl ?? "",
         cta: ref.cta ?? "SHOP_NOW",
         onlyStages,
+        ...(funnel.catalogProductSetId ? { catalogProductSetId: funnel.catalogProductSetId } : {}),
       });
       let succeeded = 0;
       for (const stage of result.stages) {
@@ -265,6 +266,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   // Create the funnel group + 3 draft campaigns.
+  const catalogProductSetId = String(form.get("productSetId") ?? "").trim();
   const funnel = await prisma.funnelGroup.create({
     data: {
       shop,
@@ -277,6 +279,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       destinationUrl,
       publishFee: fee,
       status: "draft",
+      ...(catalogProductSetId ? { catalogProductSetId } : {}),
     },
   });
 
@@ -334,6 +337,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       imageUrl,
       destinationUrl,
       cta,
+      ...(catalogProductSetId ? { catalogProductSetId } : {}),
     });
 
     let succeeded = 0;
@@ -433,6 +437,29 @@ export default function FullFunnel() {
   const [description, setDescription] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [destinationUrl, setDestinationUrl] = useState("");
+  // Catalog connection: optional product set -> BOF stage becomes a dynamic catalog ad.
+  const [productSets, setProductSets] = useState<Array<{ id: string; name: string; product_count?: number }>>([]);
+  const [productSetId, setProductSetId] = useState("");
+  const [setsLoading, setSetsLoading] = useState(false);
+  const loadProductSets = async () => {
+    if (productSets.length > 0 || setsLoading) return;
+    setSetsLoading(true);
+    try {
+      const res = await fetch("/api/ads/catalog-products?catalogId=active&type=sets");
+      const data = (await res.json()) as {
+        ok: boolean;
+        sets?: Array<{ id: string; name: string; product_count?: number }>;
+      };
+      if (data.ok) {
+        setProductSets(data.sets ?? []);
+        if ((data.sets ?? []).length === 1) setProductSetId(data.sets![0].id);
+      }
+    } catch {
+      // optional feature; stays empty
+    } finally {
+      setSetsLoading(false);
+    }
+  };
   const [cta, setCta] = useState("SHOP_NOW");
   const [aiFilling, setAiFilling] = useState(false);
   const [aiFillError, setAiFillError] = useState("");
@@ -511,6 +538,7 @@ export default function FullFunnel() {
     fd.append("imageUrl", imageUrl);
     fd.append("destinationUrl", destinationUrl || productUrl);
     fd.append("cta", cta);
+    if (productSetId) fd.append("productSetId", productSetId);
     submit(fd, { method: "post" });
   };
 
@@ -553,6 +581,7 @@ export default function FullFunnel() {
       fd.append("imageUrl", imageUrl);
       fd.append("destinationUrl", productUrl);
       fd.append("cta", cta);
+      if (productSetId) fd.append("productSetId", productSetId);
       submit(fd, { method: "post" });
     } catch (e) {
       setAiFillError(e instanceof Error ? e.message : "Quick create failed.");
@@ -828,6 +857,41 @@ export default function FullFunnel() {
                 One creative set is used across all 3 stages (Meta optimizes
                 delivery per stage).
               </Text>
+              <Card>
+                <BlockStack gap="200">
+                  <InlineStack gap="200" blockAlign="center">
+                    <Text as="p" variant="bodyMd" fontWeight="semibold">
+                      🛍️ Catalog for BOF (optional)
+                    </Text>
+                  </InlineStack>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Connect a product set to turn the BOF (Sales) stage into a
+                    dynamic catalog ad — Meta shows each person the product
+                    they're most likely to buy. Better performance for stores
+                    with a synced catalog.
+                  </Text>
+                  <Select
+                    label="Product set"
+                    options={[
+                      { label: setsLoading ? "Loading…" : "No catalog (standard BOF ad)", value: "" },
+                      ...productSets.map((ps) => ({
+                        label: `${ps.name}${ps.product_count != null ? ` (${ps.product_count} products)` : ""}`,
+                        value: ps.id,
+                      })),
+                    ]}
+                    value={productSetId}
+                    onChange={setProductSetId}
+                    onFocus={() => void loadProductSets()}
+                  />
+                  {!productSetId && !setsLoading && productSets.length === 0 && (
+                    <div>
+                      <Button size="slim" variant="plain" onClick={() => void loadProductSets()}>
+                        Load product sets
+                      </Button>
+                    </div>
+                  )}
+                </BlockStack>
+              </Card>
               <InlineStack gap="200" align="start">
                 <Button
                   loading={aiFilling}

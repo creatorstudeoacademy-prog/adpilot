@@ -269,8 +269,12 @@ export default function ComposePage() {
     products: Array<{ id: string; title: string; description: string; image: string; price: string }>;
     collections: Array<{ id: string; title: string; description: string; image: string }>;
   } | null>(null);
-  const [catalogSource, setCatalogSource] = useState("manual"); // manual | product | collection
+  const [catalogSource, setCatalogSource] = useState("manual"); // manual | product | collection | meta-catalog
   const [catalogChoice, setCatalogChoice] = useState("");
+  const [metaProducts, setMetaProducts] = useState<
+    Array<{ id: string; name?: string; price?: string; image_url?: string; link?: string; description?: string }>
+  >([]);
+  const [metaProductsLoaded, setMetaProductsLoaded] = useState(false);
 
   const loadCatalog = async () => {
     if (catalog) return;
@@ -284,6 +288,33 @@ export default function ComposePage() {
     } catch {
       // picker stays empty; merchant can still type manually
     }
+  };
+
+  const loadMetaCatalogProducts = async () => {
+    if (metaProductsLoaded) return;
+    try {
+      const res = await fetch("/api/ads/catalog-products?catalogId=active");
+      const data = (await res.json()) as {
+        ok: boolean;
+        products?: Array<{ id: string; name?: string; price?: string; image_url?: string; link?: string; description?: string }>;
+      };
+      if (data.ok) setMetaProducts(data.products ?? []);
+    } catch {
+      // picker stays empty
+    } finally {
+      setMetaProductsLoaded(true);
+    }
+  };
+
+  const applyMetaCatalogChoice = (id: string) => {
+    setCatalogChoice(id);
+    if (!id) return;
+    const p = metaProducts.find((x) => x.id === id);
+    if (!p) return;
+    const topic = `${p.name ?? "Product"}${p.price ? ` — ${p.price}` : ""}${p.description ? `. ${p.description.slice(0, 200)}` : ""}${p.link ? ` ${p.link}` : ""}`;
+    setAiTopic(topic);
+    if (p.image_url) setMediaUrl(p.image_url);
+    setImgPrompt(`Professional e-commerce product photography of ${p.name ?? "this product"}, clean studio background, high quality, commercial style`);
   };
 
   const applyCatalogChoice = (source: string, id: string) => {
@@ -458,31 +489,53 @@ export default function ComposePage() {
                           { label: "Write manually", value: "manual" },
                           { label: "Store product", value: "product" },
                           { label: "Store collection", value: "collection" },
+                          { label: "Meta catalog product", value: "meta-catalog" },
                         ]}
                         value={catalogSource}
                         onChange={(v) => {
-                          loadCatalog();
-                          applyCatalogChoice(v, "");
+                          if (v === "meta-catalog") {
+                            setCatalogChoice("");
+                            void loadMetaCatalogProducts();
+                          } else {
+                            loadCatalog();
+                            applyCatalogChoice(v, "");
+                          }
+                          setCatalogSource(v);
                         }}
                       />
-                      {catalogSource !== "manual" && (
+                      {catalogSource === "meta-catalog" ? (
                         <Select
-                          label={catalogSource === "product" ? "Product" : "Collection"}
+                          label="Catalog product"
                           options={[
                             { label: "Choose…", value: "" },
-                            ...(catalogSource === "product"
-                              ? (catalog?.products ?? []).map((p) => ({
-                                  label: `${p.title}${p.price ? ` (${p.price})` : ""}`,
-                                  value: p.id,
-                                }))
-                              : (catalog?.collections ?? []).map((c) => ({
-                                  label: c.title,
-                                  value: c.id,
-                                }))),
+                            ...metaProducts.map((p) => ({
+                              label: `${p.name ?? "Product"}${p.price ? ` (${p.price})` : ""}`,
+                              value: p.id,
+                            })),
                           ]}
                           value={catalogChoice}
-                          onChange={(v) => applyCatalogChoice(catalogSource, v)}
+                          onChange={(v) => applyMetaCatalogChoice(v)}
                         />
+                      ) : (
+                        catalogSource !== "manual" && (
+                          <Select
+                            label={catalogSource === "product" ? "Product" : "Collection"}
+                            options={[
+                              { label: "Choose…", value: "" },
+                              ...(catalogSource === "product"
+                                ? (catalog?.products ?? []).map((p) => ({
+                                    label: `${p.title}${p.price ? ` (${p.price})` : ""}`,
+                                    value: p.id,
+                                  }))
+                                : (catalog?.collections ?? []).map((c) => ({
+                                    label: c.title,
+                                    value: c.id,
+                                  }))),
+                            ]}
+                            value={catalogChoice}
+                            onChange={(v) => applyCatalogChoice(catalogSource, v)}
+                          />
+                        )
                       )}
                     </BlockStack>
                   </Card>

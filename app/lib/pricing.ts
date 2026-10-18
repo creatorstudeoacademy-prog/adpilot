@@ -17,6 +17,7 @@ export const OBJECTIVE_FEES: Record<string, number> = {
   TRAFFIC: 2.5,
   ENGAGEMENT: 2.5,
   SALES: 3,
+  CATALOG_SALES: 3,
 };
 
 export const OBJECTIVE_FEE_LABELS: Record<string, string> = {
@@ -24,6 +25,7 @@ export const OBJECTIVE_FEE_LABELS: Record<string, string> = {
   TRAFFIC: "Traffic",
   ENGAGEMENT: "Engagement",
   SALES: "Sales",
+  CATALOG_SALES: "Catalog Sales",
 };
 
 /** Extra fee per ad set beyond the first (USD). */
