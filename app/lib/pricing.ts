@@ -3,7 +3,7 @@
  */
 
 /** Flat fee per social post published (USD). Deducted from wallet on publish. */
-export const POST_PUBLISH_FEE = 0.3;
+export const POST_PUBLISH_FEE = 0.2;
 
 /** Fee per AI caption generation (USD). Deducted from wallet per generation. */
 export const AI_GENERATION_FEE = 0.2;
@@ -105,11 +105,11 @@ export const TOPUP_PACKS = [
 
 /* ── Scheduled post fees by content type (USD, per post, manual upload) ── */
 /** Text-only post. */
-export const TEXT_POST_FEE = 0.3;
+export const TEXT_POST_FEE = 0.2;
 /** Text + photo post. */
-export const PHOTO_POST_FEE = 0.5;
+export const PHOTO_POST_FEE = 0.35;
 /** Text + video post. */
-export const VIDEO_POST_FEE = 0.7;
+export const VIDEO_POST_FEE = 0.5;
 
 /* ── Auto-schedule packages (USD, one-time; includes N scheduled text posts) ── */
 export interface SchedulePackageDef {
@@ -121,9 +121,9 @@ export interface SchedulePackageDef {
   sublabel: string;
 }
 export const SCHEDULE_PACKAGES: SchedulePackageDef[] = [
-  { id: "7d", days: 7, posts: 7, fee: 1.8, label: "7-Day Auto-Post", sublabel: "7 scheduled text posts · $1.80" },
-  { id: "15d", days: 15, posts: 15, fee: 3.75, label: "15-Day Auto-Post", sublabel: "15 scheduled text posts · $3.75" },
-  { id: "30d", days: 30, posts: 30, fee: 7.0, label: "30-Day Auto-Post", sublabel: "30 scheduled text posts · $7.00" },
+  { id: "7d", days: 7, posts: 7, fee: 1.2, label: "7-Day Auto-Post", sublabel: "7 scheduled text posts · $1.20" },
+  { id: "15d", days: 15, posts: 15, fee: 2.5, label: "15-Day Auto-Post", sublabel: "15 scheduled text posts · $2.50" },
+  { id: "30d", days: 30, posts: 30, fee: 4.5, label: "30-Day Auto-Post", sublabel: "30 scheduled text posts · $4.50" },
 ];
 
 /** FUTURE: auto-post with photo / video (not yet available). */
