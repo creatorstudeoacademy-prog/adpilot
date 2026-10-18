@@ -308,6 +308,90 @@ export async function generateWithProvider(
   return text;
 }
 
+export interface ChatTurn {
+  role: "user" | "assistant";
+  content: string;
+}
+
+/**
+ * Generic multi-turn chat call (plain text, no JSON wrapper).
+ * Unlike generateWithProvider (which forces json_object on OpenAI-type
+ * providers), this is meant for conversational replies.
+ * Never logs or returns the API key.
+ */
+export async function chatWithProvider(
+  cfg: AIProviderConfig,
+  systemPrompt: string,
+  turns: ChatTurn[],
+): Promise<string> {
+  const text =
+    cfg.type === "anthropic"
+      ? await callAnthropicChat(cfg, systemPrompt, turns)
+      : await callOpenAIChat(cfg, systemPrompt, turns);
+  if (!text.trim()) throw new Error(`Provider "${cfg.name}" returned empty text.`);
+  return text;
+}
+
+async function callOpenAIChat(
+  cfg: AIProviderConfig,
+  systemPrompt: string,
+  turns: ChatTurn[],
+): Promise<string> {
+  const res = await fetch(`${cfg.baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${cfg.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: cfg.model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        ...turns.map((t) => ({ role: t.role, content: t.content })),
+      ],
+      temperature: 0.7,
+      max_tokens: 800,
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`OpenAI-compatible API error ${res.status}: ${text.slice(0, 200)}`);
+  }
+  const data = (await res.json()) as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
+  return data.choices?.[0]?.message?.content ?? "";
+}
+
+async function callAnthropicChat(
+  cfg: AIProviderConfig,
+  systemPrompt: string,
+  turns: ChatTurn[],
+): Promise<string> {
+  const res = await fetch(ANTHROPIC_ENDPOINT, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": cfg.apiKey,
+      "anthropic-version": ANTHROPIC_VERSION,
+    },
+    body: JSON.stringify({
+      model: cfg.model,
+      max_tokens: 1024,
+      system: systemPrompt,
+      messages: turns.map((t) => ({ role: t.role, content: t.content })),
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Anthropic API error ${res.status}: ${text.slice(0, 200)}`);
+  }
+  const data = (await res.json()) as {
+    content?: Array<{ type?: string; text?: string }>;
+  };
+  return data.content?.find((b) => b.type === "text")?.text ?? "";
+}
+
 /** Find an ENV-VAR provider by slot name (case-insensitive).
  *  (Env only — use getProviderByNameAsync() for the merged DB + env list.) */
 export function getProviderByName(name: string): AIProviderConfig | undefined {
