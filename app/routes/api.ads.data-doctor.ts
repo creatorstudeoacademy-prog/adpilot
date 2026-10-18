@@ -91,7 +91,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
       unpaid: real.filter((o) => o.displayFinancialStatus === "PENDING" || o.displayFinancialStatus === "UNPAID").length,
     };
   } catch (e) {
-    const reinstallUrl = `https://admin.shopify.com/store/${shop}/oauth/authorize?client_id=f5feb18942e0d098f96e02c31159d136&scope=read_products,read_orders&redirect_uri=https://adpilot-production-c9f8.up.railway.app/auth/callback`;
+    const storeHandle = shop.replace(/\.myshopify\.com$/, "");
+    const reinstallUrl = `https://admin.shopify.com/store/${storeHandle}/oauth/authorize?client_id=f5feb18942e0d098f96e02c31159d136&scope=read_products,read_orders&redirect_uri=https://adpilot-production-c9f8.up.railway.app/auth/callback`;
     issues.push({
       id: "orders_unreadable",
       severity: "warning",
