@@ -77,6 +77,7 @@ model ScheduledPost {
   publishedAt     DateTime?
   error           String?
   createdAt       DateTime  @default(now())
+  schedulePackageId String? // which auto-schedule package this post came from (null = manual)
 }
 
 /// A connected Meta ad account (for running ads).

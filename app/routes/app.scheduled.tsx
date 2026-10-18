@@ -14,6 +14,7 @@ import {
   Grid,
   InlineStack,
   Page,
+  Select,
   Text,
 } from "@shopify/polaris";
 
@@ -37,18 +38,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  const [posts, activePackage] = await Promise.all([
+  const [posts, activePackage, allPackages] = await Promise.all([
     prisma.scheduledPost.findMany({
       where: { shop },
       include: { socialAccount: true },
       orderBy: { createdAt: "desc" },
-      take: 100,
+      take: 200,
     }),
     prisma.schedulePackage.findFirst({
       where: { shop, status: "active" },
       orderBy: { createdAt: "desc" },
     }),
+    prisma.schedulePackage.findMany({
+      where: { shop },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    }),
   ]);
+
+  const pkgLabel = (id: string) =>
+    SCHEDULE_PACKAGES.find((s) => s.id === id)?.label ?? id;
 
   return json({
     posts: posts.map((p) => ({
@@ -62,6 +71,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       publishedAt: p.publishedAt?.toISOString() ?? null,
       error: p.error,
       createdAt: p.createdAt.toISOString(),
+      packageId: (p as { schedulePackageId?: string | null }).schedulePackageId ?? null,
+    })),
+    boughtPackages: allPackages.map((pk) => ({
+      id: pk.id,
+      label: `${pkgLabel(pk.packageId)} · ${new Date(pk.createdAt).toLocaleDateString()}`,
     })),
     activePackage: activePackage
       ? {
@@ -88,7 +102,7 @@ function formatDate(iso: string | null) {
 }
 
 export default function ScheduledPage() {
-  const { posts, activePackage, packages, fees } = useLoaderData<typeof loader>();
+  const { posts, activePackage, packages, fees, boughtPackages } = useLoaderData<typeof loader>();
   const revalidator = useRevalidator();
   const [buyError, setBuyError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -96,6 +110,14 @@ export default function ScheduledPage() {
   const [editDate, setEditDate] = useState("");
   const [editTime, setEditTime] = useState("09:00");
   const [rowBusy, setRowBusy] = useState<string | null>(null);
+  const [pkgFilter, setPkgFilter] = useState<string>("all");
+
+  const visiblePosts =
+    pkgFilter === "all"
+      ? posts
+      : pkgFilter === "manual"
+        ? posts.filter((p) => !p.packageId)
+        : posts.filter((p) => p.packageId === pkgFilter);
 
   const rowAction = async (id: string, act: "update" | "delete") => {
     setRowBusy(id);
@@ -123,7 +145,7 @@ export default function ScheduledPage() {
     }
   };
 
-  const rows = posts.map((p) => [
+  const rows = visiblePosts.map((p) => [
     p.content || "(media only)",
     p.pageName,
     p.mediaType,
@@ -277,7 +299,26 @@ export default function ScheduledPage() {
         </Card>
 
         {/* ── Posts table ── */}
-        {posts.length === 0 ? (
+        <BlockStack gap="200">
+          <InlineStack align="space-between" blockAlign="center">
+            <Text as="h2" variant="headingMd">
+              Posts {pkgFilter !== "all" && `(${visiblePosts.length})`}
+            </Text>
+            <div style={{ minWidth: "220px" }}>
+              <Select
+                label="Filter by package"
+                labelHidden
+                options={[
+                  { label: "All posts", value: "all" },
+                  { label: "Manual posts", value: "manual" },
+                  ...boughtPackages.map((b) => ({ label: b.label, value: b.id })),
+                ]}
+                value={pkgFilter}
+                onChange={setPkgFilter}
+              />
+            </div>
+          </InlineStack>
+        {visiblePosts.length === 0 ? (
           <Card>
             <EmptyState
               heading="No posts yet"
@@ -298,6 +339,7 @@ export default function ScheduledPage() {
             />
           </Card>
         )}
+        </BlockStack>
 
         {/* ── Edit modal ── */}
         {editingId && (

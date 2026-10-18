@@ -107,6 +107,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           platforms: '["facebook"]',
           scheduledAt: new Date(`${p.date}T${p.time}:00Z`),
           status: "scheduled",
+          schedulePackageId: packageRecord?.id ?? null,
         },
       }),
     ),
