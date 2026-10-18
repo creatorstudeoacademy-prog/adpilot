@@ -275,3 +275,18 @@ model SchedulePackage {
 
   @@index([shop, status])
 }
+
+/// Lifetime auto-post subscription (3-month billing cycles).
+model LifetimePackage {
+  id          String   @id @default(cuid())
+  shop        String
+  postsPerDay Int
+  feeCharged  Float
+  status      String   @default("active") // active | cancelled
+  autoRenew   Boolean  @default(true)
+  startsAt    DateTime @default(now())
+  endsAt      DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([shop, status])
+}
