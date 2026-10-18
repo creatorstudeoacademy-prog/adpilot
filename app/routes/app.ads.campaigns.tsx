@@ -202,6 +202,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           },
         ],
       });
+      // First successful publish → queue a review prompt.
+      const existingPrompt = await prisma.reviewPrompt.findFirst({
+        where: { shop, trigger: "first_campaign" },
+      });
+      if (!existingPrompt) {
+        await prisma.reviewPrompt.create({ data: { shop, trigger: "first_campaign" } });
+      }
       await prisma.campaign.update({
         where: { id: campaign.id },
         data: {

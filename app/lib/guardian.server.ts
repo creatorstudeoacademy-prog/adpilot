@@ -81,6 +81,42 @@ export async function runGuardianPass(): Promise<GuardianResult> {
           });
           if (recent) continue;
 
+          // Autopilot: flag winners for scaling (ROAS 3x+ with meaningful spend).
+          if (purchases >= 5 && roas >= 3 && spend >= 50) {
+            const scaled = await prisma.guardianLog.findFirst({
+              where: {
+                shop: s.shop,
+                campaignId: camp.id,
+                action: "scale_suggested",
+                createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+              },
+            });
+            if (!scaled) {
+              await prisma.guardianLog.create({
+                data: {
+                  shop: s.shop,
+                  campaignId: camp.id,
+                  campaignName: camp.name,
+                  action: "scale_suggested",
+                  reason: `Winner! ROAS ${roas.toFixed(1)}x on ${spend.toFixed(2)} spend — consider increasing budget 20-30%.`,
+                  spend,
+                  purchases,
+                  roas,
+                },
+              });
+            }
+            // Trigger a review prompt on first winner.
+            const prompted = await prisma.reviewPrompt.findFirst({
+              where: { shop: s.shop, trigger: "winner_scaled" },
+            });
+            if (!prompted) {
+              await prisma.reviewPrompt.create({
+                data: { shop: s.shop, trigger: "winner_scaled" },
+              });
+            }
+            continue;
+          }
+
           let reason: string | null = null;
           if (purchases === 0 && spend >= s.maxSpendNoPurchase) {
             reason = `Spent ${spend.toFixed(2)} with zero purchases (limit: ${s.maxSpendNoPurchase})`;

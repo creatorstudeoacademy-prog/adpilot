@@ -153,8 +153,10 @@ export default function BudgetGuardian() {
               </Text>
               {log.slice(0, 5).map((l) => (
                 <InlineStack key={l.id} gap="200" blockAlign="center">
-                  <Badge tone={l.action === "paused" ? "critical" : "warning"}>
-                    {l.action === "paused" ? "⏸ Paused" : "⚠️ Alert"}
+                  <Badge
+                    tone={l.action === "paused" ? "critical" : l.action === "scale_suggested" ? "success" : "warning"}
+                  >
+                    {l.action === "paused" ? "⏸ Paused" : l.action === "scale_suggested" ? "🚀 Scale" : "⚠️ Alert"}
                   </Badge>
                   <Text as="p" variant="bodySm">
                     <strong>{l.campaignName}</strong> — {l.reason}

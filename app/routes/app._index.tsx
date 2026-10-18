@@ -30,6 +30,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { NavButton } from "../components/NavButton";
 import { ReviewShowcase } from "../components/ReviewShowcase";
+import ReviewPromptBanner from "../components/ReviewPromptBanner";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -195,6 +196,7 @@ export default function Dashboard() {
       }
     >
       <BlockStack gap="500">
+        <ReviewPromptBanner />
         {/* ── Hero banner ── */}
         <Card>
           <div
