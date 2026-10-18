@@ -68,7 +68,7 @@ function ScoreRing({ score }: { score: number }) {
 }
 
 /**
- * The AI Ad Strategist bar: analyzes 30 days of ad account data and
+ * The Ad Strategy bar: analyzes 30 days of ad account data and
  * produces a concrete sales strategy (audience, placements, budget,
  * creative) — then one click applies it to a new campaign.
  */
@@ -79,6 +79,7 @@ export default function StrategyBar() {
   const [accountName, setAccountName] = useState<string>("");
 
   const strategy = raw ? parseStrategy(raw) : null;
+  const parseFailed = raw !== null && strategy === null;
 
   const analyze = async () => {
     if (busy) return;
@@ -125,10 +126,10 @@ export default function StrategyBar() {
     <Card>
       <BlockStack gap="300">
         <InlineStack gap="300" blockAlign="center">
-          <span style={{ fontSize: 28 }}>🧠</span>
+          <span style={{ fontSize: 28 }}>📈</span>
           <BlockStack gap="050">
             <Text as="h2" variant="headingMd">
-              AI Ad Strategist
+              Ad Strategy
             </Text>
             <Text as="p" variant="bodySm" tone="subdued">
               Analyzes your last 30 days of ad data — who buys, where they are,
@@ -143,6 +144,19 @@ export default function StrategyBar() {
         </InlineStack>
 
         {error && <Banner tone="critical">{error}</Banner>}
+
+        {parseFailed && (
+          <Banner tone="warning">
+            <BlockStack gap="100">
+              <Text as="p" variant="bodySm" fontWeight="semibold">
+                Analysis completed but the report format was unexpected. Raw result:
+              </Text>
+              <Text as="p" variant="bodySm">
+                {raw}
+              </Text>
+            </BlockStack>
+          </Banner>
+        )}
 
         {strategy && (
           <BlockStack gap="300">
