@@ -66,6 +66,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (!res.ok || data.error) {
       throw new Error(data.error?.message ?? `HTTP ${res.status}`);
     }
+    // Log to the live event feed (real data the merchant can watch).
+    prisma.pixelEvent
+      .create({
+        data: { shop, pixelId, eventName, source: "test" },
+      })
+      .catch(() => {});
     return json({
       ok: true,
       testCode,

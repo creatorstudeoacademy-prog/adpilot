@@ -12,3 +12,15 @@ handle = "adpilot-web-pixel"
   type = "text"
   name = "Meta Pixel ID"
   description = "Your Meta Pixel ID (numbers only). Find it in AdPilot > Accounts, or in Meta Events Manager."
+
+  [[extensions.settings.fields]]
+  key = "app_url"
+  type = "text"
+  name = "AdPilot app URL"
+  description = "Your AdPilot app URL (for the live event stream). Example: https://adpilot-production-c9f8.up.railway.app"
+
+  [[extensions.settings.fields]]
+  key = "shop"
+  type = "text"
+  name = "Shop domain"
+  description = "Your store's myshopify.com domain. Example: your-store.myshopify.com"

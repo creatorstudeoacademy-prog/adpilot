@@ -392,3 +392,37 @@ model ShopCoupon {
   @@unique([couponId, shop])
   @@index([shop])
 }
+
+/// Live pixel events collected by AdPilot (for the live event feed).
+/// Browser events arrive via the web pixel -> /api/pixel/collect;
+/// server/test events are logged when sent through AdPilot.
+model PixelEvent {
+  id        String   @id @default(cuid())
+  shop      String
+  pixelId   String
+  eventName String
+  source    String   @default("browser") // browser | server | test
+  url       String?
+  value     Float?
+  currency  String?
+  contentIds String?  // JSON array
+  eventId   String?  // dedupe key (browser+server pairs share it)
+  createdAt DateTime @default(now())
+
+  @@index([shop, pixelId, createdAt])
+}
+
+/// Per-shop pixel data-quality filter settings.
+model PixelSettings {
+  id                   String   @id @default(cuid())
+  shop                 String   @unique
+  pixelId              String?
+  dedupeEnabled        Boolean  @default(true)
+  botFilterEnabled     Boolean  @default(true)
+  piiScrubEnabled      Boolean  @default(true)
+  staffFilterEnabled   Boolean  @default(false)
+  staffIps             String?  // comma-separated IPs to exclude
+  requireValueCurrency Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}

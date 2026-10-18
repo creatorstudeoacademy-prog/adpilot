@@ -32,6 +32,7 @@ import { listAdAccounts } from "../lib/meta-ads.server";
 import { decryptToken, encryptToken } from "../lib/token-vault.server";
 import { Anim, Hero } from "../components/ui";
 import CampaignAnalysis from "../components/CampaignAnalysis";
+import PixelLiveSection from "../components/PixelLiveSection";
 
 const GRAPH_VERSION = "v21.0";
 
@@ -1049,6 +1050,9 @@ function PixelCard({
               </InlineStack>
               <CampaignAnalysis raw={health.text} campaignName={health.name} />
             </BlockStack>
+          )}
+          {(currentPixelId || pixelId.trim()) && (
+            <PixelLiveSection pixelId={(currentPixelId || pixelId.trim()) as string} />
           )}
         </BlockStack>
       </BlockStack>
