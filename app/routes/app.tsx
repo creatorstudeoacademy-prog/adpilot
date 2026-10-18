@@ -7,6 +7,7 @@ import { NavMenu } from "@shopify/app-bridge-react";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 
 import { authenticate } from "../shopify.server";
+import { SupportChatWidget } from "../components/SupportChatWidget";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
@@ -54,6 +55,7 @@ export default function App() {
         )}
       </NavMenu>
       <Outlet />
+      <SupportChatWidget />
     </AppProvider>
   );
 }
