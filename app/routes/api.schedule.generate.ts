@@ -60,7 +60,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     dates.push(d.toISOString().slice(0, 10)); // YYYY-MM-DD
   }
 
-  const systemPrompt = `You are a social media content writer for Facebook posts. Write engaging Facebook posts that are 3-5 sentences long (substantial, not one-liners). Each post must end with 3-5 relevant hashtags on a new line (e.g.\n\n#Fashion #WinterStyle #ShopNow). Be warm, conversational, and persuasive. Return ONLY a JSON array of strings, one post per item, no other text. Example: ["Post text here with several sentences that engage the reader and tell a story.\n\n#Tag1 #Tag2 #Tag3", "Another post here."]`;
+  const systemPrompt = `You are a social media content writer for Facebook posts. Write engaging Facebook posts that are 3-5 sentences long (substantial, not one-liners). Each post must end with 3-5 relevant hashtags on a new line.
+
+CRITICAL: Your ENTIRE response must be ONLY a valid JSON array of strings. No markdown, no code fences, no explanations, no text before or after. Just the raw JSON array like this:
+["First post text here with several sentences.\n\n#Tag1 #Tag2 #Tag3","Second post text here.\n\n#Tag4 #Tag5"]`;
 
   const userPrompt = `Goal: ${goal}\nTopic: ${topic}\nWrite ${pkg.posts} different Facebook posts (one per day, dates: ${dates.join(", ")}). Vary the angle each day. Return ONLY the JSON array of ${pkg.posts} post strings.`;
 
@@ -83,14 +86,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
   }
 
-  // Extract JSON array from response.
+  // Extract JSON array from response (strip markdown code fences first).
   let contents: string[] = [];
   try {
-    const match = raw.match(/\[[\s\S]*\]/);
-    contents = JSON.parse(match ? match[0] : raw) as string[];
-    if (!Array.isArray(contents)) throw new Error("not array");
-    contents = contents.map((c) => String(c).slice(0, 2000));
+    let cleaned = raw.trim();
+    // Remove ```json ... ``` or ``` ... ``` wrappers
+    const fence = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fence) cleaned = fence[1].trim();
+    const match = cleaned.match(/\[[\s\S]*\]/);
+    const parsed: unknown = JSON.parse(match ? match[0] : cleaned);
+    if (!Array.isArray(parsed)) throw new Error("not array");
+    contents = parsed.map((c) => String(c).slice(0, 2000));
+    if (contents.length === 0) throw new Error("empty array");
   } catch {
+    console.error("[schedule/generate] AI parse failed. Raw:", raw.slice(0, 500));
     return json(
       { ok: false, error: "AI_PARSE_FAILED", message: "AI returned an unexpected format. Please try again." },
       { status: 502 },
