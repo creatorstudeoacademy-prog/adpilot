@@ -941,7 +941,8 @@ export default function FullFunnel() {
             </BlockStack>
           </Card>
         )}
-          </>
+        </>
+        )}
       </BlockStack>
 
       <Layout.Section>
