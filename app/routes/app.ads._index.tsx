@@ -18,6 +18,7 @@ import prisma from "../db.server";
 import { NavButton } from "../components/NavButton";
 import { Anim, Hero, PromoBanner } from "../components/ui";
 import StrategyBar from "../components/StrategyBar";
+import DataDoctor from "../components/DataDoctor";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -74,6 +75,7 @@ export default function AdsDashboard() {
         {adAccounts.length > 0 && (
           <Anim index={1}>
             <StrategyBar />
+          <DataDoctor />
           </Anim>
         )}
         {adAccounts.length === 0 ? (

@@ -13,7 +13,7 @@ embedded = true
 [access_scopes]
 # read_products: the Compose product picker queries the Admin API product catalog.
 # (write_files is NOT needed — uploads go to local /data/media.)
-scopes = "read_products"
+scopes = "read_products,read_orders"
 
 [auth]
 redirect_urls = ["https://adpilot-production-c9f8.up.railway.app/auth/callback"]

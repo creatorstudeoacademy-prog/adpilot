@@ -77,7 +77,7 @@ async function getInsights(
  *   creativeGuidance[], risks[], recommendations[] }
  */
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const shop = session.shop;
 
   let body: { adAccountDbId?: unknown } = {};
@@ -135,6 +135,40 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const impressions = parseInt(t.impressions ?? "0", 10) || 0;
   const clicks = parseInt(t.clicks ?? "0", 10) || 0;
   const { purchases } = sumPurchases(t);
+
+  /* ---- Real order data (ground truth — beats ad-reported numbers) ---- */
+  let orderContext = "Real Shopify order data: unavailable (read_orders scope not granted yet).";
+  try {
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const ores = await admin.graphql(
+      `#graphql
+      query($since: String!) {
+        orders(first: 100, query: $since, sortKey: CREATED_AT, reverse: true) {
+          edges {
+            node {
+              name
+              test
+              displayFinancialStatus
+              totalPriceSet { shopMoney { amount currencyCode } }
+            }
+          }
+        }
+      }`,
+      { variables: { since: `created_at:>=${since}` } },
+    );
+    const odata = (await ores.json()) as any;
+    const onodes: Array<{ test: boolean; displayFinancialStatus: string; totalPriceSet: { shopMoney: { amount: string; currencyCode: string } } }> =
+      (odata?.data?.orders?.edges ?? []).map((e: any) => e.node);
+    const real = onodes.filter((o) => !o.test);
+    const testCount = onodes.length - real.length;
+    const revenue = real.reduce((sum, o) => sum + parseFloat(o.totalPriceSet.shopMoney.amount || "0"), 0);
+    orderContext = `Real Shopify orders (last 30 days): ${real.length} real orders, ${revenue.toFixed(2)} ${real[0]?.totalPriceSet.shopMoney.currencyCode ?? ""} revenue.`;
+    if (testCount > 0) {
+      orderContext += ` WARNING: ${testCount} TEST/FAKE orders detected — these pollute pixel data. Tell the merchant to delete them from Shopify Orders and stop firing test events without a test_event_code. Base your strategy ONLY on the ${real.length} real orders.`;
+    }
+  } catch {
+    /* scope not granted yet — AI works with Meta data only */
+  }
 
   /* ---- Deep research: the merchant's TOTAL business picture ---- */
   const biz: {
@@ -328,6 +362,7 @@ Rules:
     `\nBy age/gender:\n${fmtRows(byAgeGender, ["age", "gender"]) || "(no data)"}\n` +
     `\nBy country:\n${fmtRows(byCountry, ["country"]) || "(no data)"}\n` +
     `\nBy platform:\n${fmtRows(byPlatform, ["publisher_platform"]) || "(no data)"}\n` +
+    `\nREAL STORE ORDERS (ground truth — trust over ad numbers):\n${orderContext}\n` +
     (bizLines.length > 0 ? `\nTOTAL BUSINESS PICTURE:\n${bizLines.join("\n")}\n` : "") +
     `\nAs a senior media buyer, analyze this merchant's whole business and build the sales strategy. What exact setup (age, location, placements, budget, creative) should they use so they don't waste money? What should they fix first?`;
 
