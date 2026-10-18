@@ -102,3 +102,29 @@ export const TOPUP_PACKS = [
   { price: 90, credit: 100, label: "$90", sublabel: "$90 + $10 bonus = $100 value" },
   { price: 240, credit: 300, label: "$240", sublabel: "$240 + $60 bonus = $300 value" },
 ];
+
+/* ── Scheduled post fees by content type (USD, per post, manual upload) ── */
+/** Text-only post. */
+export const TEXT_POST_FEE = 0.5;
+/** Text + photo post. */
+export const PHOTO_POST_FEE = 0.75;
+/** Text + video post. */
+export const VIDEO_POST_FEE = 1.0;
+
+/* ── Auto-schedule packages (USD, one-time; includes N scheduled text posts) ── */
+export interface SchedulePackageDef {
+  id: string;
+  days: number;
+  posts: number;
+  fee: number;
+  label: string;
+  sublabel: string;
+}
+export const SCHEDULE_PACKAGES: SchedulePackageDef[] = [
+  { id: "7d", days: 7, posts: 7, fee: 3.0, label: "7-Day Auto-Post", sublabel: "7 scheduled text posts · $3.00" },
+  { id: "15d", days: 15, posts: 15, fee: 6.0, label: "15-Day Auto-Post", sublabel: "15 scheduled text posts · $6.00" },
+  { id: "30d", days: 30, posts: 30, fee: 11.0, label: "30-Day Auto-Post", sublabel: "30 scheduled text posts · $11.00" },
+];
+
+/** FUTURE: auto-post with photo / video (not yet available). */
+export const AUTO_MEDIA_COMING_SOON = true;

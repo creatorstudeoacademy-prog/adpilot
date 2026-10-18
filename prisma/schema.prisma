@@ -258,3 +258,19 @@ model AiProvider {
 
   @@index([enabled, sortOrder])
 }
+
+/// Auto-schedule package purchase (7/15/30-day plans).
+model SchedulePackage {
+  id          String   @id @default(cuid())
+  shop        String
+  packageId   String   // "7d" | "15d" | "30d"
+  totalPosts  Int
+  usedPosts   Int      @default(0)
+  feeCharged  Float
+  status      String   @default("active") // active | expired | exhausted
+  startsAt    DateTime @default(now())
+  endsAt      DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([shop, status])
+}
