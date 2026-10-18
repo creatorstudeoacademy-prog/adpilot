@@ -448,6 +448,7 @@ export default function CreateCampaign() {
   );
   const [name, setName] = useState<string>((d.name as string) ?? "");
   const [searchParams] = useSearchParams();
+  const beginnerMode = searchParams.get("beginner") === "1";
   const [dailyBudget, setDailyBudget] = useState<string>(
     d.dailyBudget != null ? String(d.dailyBudget) : (searchParams.get("budget") ?? "10"),
   );
@@ -464,7 +465,11 @@ export default function CreateCampaign() {
           destinationUrl: dCreative.destinationUrl ?? "",
           cta: dCreative.cta ?? "SHOP_NOW",
         }
-      : { ...EMPTY_CREATIVE },
+      : {
+          ...EMPTY_CREATIVE,
+          headline: searchParams.get("product") ?? "",
+          primaryText: searchParams.get("product") ?? "",
+        },
   ]);
   const [targetingMode, setTargetingMode] = useState<"new" | "saved">(
     d.audienceDbId ? "saved" : "new",

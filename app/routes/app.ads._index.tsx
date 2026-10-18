@@ -1,6 +1,7 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { useLoaderData } from "@remix-run/react";
+import { useState } from "react";
 import {
   Badge,
   BlockStack,
@@ -48,6 +49,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export default function AdsDashboard() {
+  const [showWizard, setShowWizard] = useState(false);
   const { adAccounts, activeCount, campaignCount, totalBudgetReserved } =
     useLoaderData<typeof loader>();
 
@@ -76,6 +78,25 @@ export default function AdsDashboard() {
         {adAccounts.length > 0 && (
           <Anim index={1}>
             <StrategyBar />
+          {showWizard ? (
+            <BeginnerWizard onClose={() => setShowWizard(false)} />
+          ) : (
+            <Card>
+              <InlineStack gap="200" blockAlign="center" align="space-between">
+                <BlockStack gap="100">
+                  <Text as="p" variant="headingMd">
+                    🧒 New to ads?
+                  </Text>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Answer 3 simple questions — we'll handle all the complicated settings.
+                  </Text>
+                </BlockStack>
+                <Button variant="primary" onClick={() => setShowWizard(true)}>
+                  Start Easy Mode
+                </Button>
+              </InlineStack>
+            </Card>
+          )}
           <DataDoctor />
           <BudgetGuardian />
           </Anim>
