@@ -222,33 +222,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ ok: true, message: pixelId ? `Pixel ${pixelId} saved.` : "Pixel removed." });
   }
 
-  if (intent === "fetch_pixels") {
-    const id = String(formData.get("id") ?? "");
-    const account = await prisma.adAccount.findFirst({
-      where: { id, shop },
-    });
-    if (!account) {
-      return json({ ok: false, message: "Ad account not found." });
-    }
-    const tokenRecord = await prisma.metaUserToken.findFirst({
-      where: { shop },
-      orderBy: { updatedAt: "desc" },
-    });
-    if (!tokenRecord) {
-      return json({ ok: false, message: "Connect Facebook first." });
-    }
-    try {
-      const { getAdPixels } = await import("../lib/meta-ads.server");
-      const pixels = await getAdPixels(account.adAccountId, tokenRecord.accessToken);
-      return json({ ok: true, pixels });
-    } catch (e) {
-      return json({
-        ok: false,
-        message: e instanceof Error ? e.message : "Failed to fetch pixels.",
-      });
-    }
-  }
-
   if (intent === "save_manual_token") {
     const token = String(formData.get("token") ?? "").trim();
     if (!token) {
@@ -359,12 +332,10 @@ function PixelCard({
     setFetching(true);
     setFetchError(null);
     try {
-      const data = new FormData();
-      data.set("intent", "fetch_pixels");
-      data.set("id", adAccountId);
-      const res = await fetch("/app/accounts", {
+      const res = await fetch("/api/ads/fetch-pixels", {
         method: "POST",
-        body: data,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: adAccountId }),
       });
       const text = await res.text();
       let json: { ok?: boolean; pixels?: Array<{ id: string; name: string }>; message?: string } = {};
