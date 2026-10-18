@@ -94,6 +94,7 @@ export default function ScheduledPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
   const [editDate, setEditDate] = useState("");
+  const [editTime, setEditTime] = useState("09:00");
   const [rowBusy, setRowBusy] = useState<string | null>(null);
 
   const rowAction = async (id: string, act: "update" | "delete") => {
@@ -105,7 +106,7 @@ export default function ScheduledPage() {
         body: JSON.stringify(
           act === "delete"
             ? { id, action: "delete" }
-            : { id, action: "update", content: editContent, date: editDate },
+            : { id, action: "update", content: editContent, date: editDate, time: editTime },
         ),
       });
       const data = (await res.json()) as { ok: boolean; message?: string };
@@ -141,6 +142,7 @@ export default function ScheduledPage() {
             setEditContent(posts.find((x) => x.id === p.id)?.content ?? "");
             const iso = posts.find((x) => x.id === p.id)?.scheduledAt;
             setEditDate(iso ? iso.slice(0, 10) : "");
+            setEditTime(iso ? iso.slice(11, 16) : "09:00");
           }}
         >
           Edit
@@ -220,9 +222,8 @@ export default function ScheduledPage() {
                       <Button
                         variant="primary"
                         url={`/app/scheduled/setup`}
-                        disabled={!!activePackage}
                       >
-                        {activePackage ? "Active package running" : "Select & setup"}
+                        Select & setup
                       </Button>
                     </BlockStack>
                   </Box>
@@ -311,6 +312,13 @@ export default function ScheduledPage() {
                   type="date"
                   value={editDate}
                   onChange={setEditDate}
+                  autoComplete="off"
+                />
+                <TextField
+                  label="Time"
+                  type="time"
+                  value={editTime}
+                  onChange={setEditTime}
                   autoComplete="off"
                 />
                 <TextField

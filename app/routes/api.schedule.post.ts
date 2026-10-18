@@ -14,7 +14,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  let body: { id?: unknown; action?: unknown; content?: unknown; date?: unknown } = {};
+  let body: { id?: unknown; action?: unknown; content?: unknown; date?: unknown; time?: unknown } = {};
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -52,7 +52,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
   const data: { content: string; scheduledAt?: Date } = { content };
   if (dateRaw) {
-    const d = new Date(`${dateRaw}T09:00:00Z`);
+    const timeRaw = /^\d{2}:\d{2}$/.test(String(body.time ?? "")) ? String(body.time) : "09:00";
+    const d = new Date(`${dateRaw}T${timeRaw}:00Z`);
     if (isNaN(d.getTime())) {
       return json({ ok: false, error: "BAD_DATE", message: "Invalid date." }, { status: 400 });
     }

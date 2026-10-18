@@ -35,6 +35,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 interface Draft {
   date: string;
+  time: string;
   content: string;
 }
 
@@ -52,6 +53,7 @@ export default function ScheduleSetup() {
   const [startDate, setStartDate] = useState(
     new Date().toISOString().slice(0, 10),
   );
+  const [postTime, setPostTime] = useState("09:00");
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -77,7 +79,7 @@ export default function ScheduleSetup() {
         message?: string;
       };
       if (data.ok && data.posts) {
-        setDrafts(data.posts);
+        setDrafts(data.posts.map((p) => ({ ...p, time: postTime })));
         setStep(3);
       } else {
         setError(data.message || "Couldn't generate posts.");
@@ -219,6 +221,14 @@ export default function ScheduleSetup() {
                   onChange={setStartDate}
                   autoComplete="off"
                 />
+                <TextField
+                  label="Post time (each day)"
+                  type="time"
+                  value={postTime}
+                  onChange={setPostTime}
+                  autoComplete="off"
+                  helpText="Same date, different times also allowed — adjust per post in the next step."
+                />
                 <InlineStack gap="200" align="end">
                   <Button onClick={() => setStep(1)}>Back</Button>
                   <Button variant="primary" loading={busy} onClick={() => void generate()}>
@@ -259,6 +269,14 @@ export default function ScheduleSetup() {
                       value={d.date}
                       onChange={(v) => updateDraft(i, "date", v)}
                       type="date"
+                      autoComplete="off"
+                    />
+                    <TextField
+                      label={`Post ${i + 1} time`}
+                      labelHidden
+                      value={d.time}
+                      onChange={(v) => updateDraft(i, "time", v)}
+                      type="time"
                       autoComplete="off"
                     />
                     <TextField

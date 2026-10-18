@@ -29,7 +29,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const rawPosts = Array.isArray(body.posts) ? body.posts : [];
   const posts = rawPosts
     .filter(
-      (p): p is { date: string; content: string } =>
+      (p): p is { date: string; time?: string; content: string } =>
         !!p && typeof p === "object" &&
         typeof (p as { date?: unknown }).date === "string" &&
         typeof (p as { content?: unknown }).content === "string" &&
@@ -37,6 +37,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     )
     .map((p) => ({
       date: String(p.date).slice(0, 10),
+      time: /^\d{2}:\d{2}$/.test(String(p.time ?? "")) ? String(p.time) : "09:00",
       content: String(p.content).trim().slice(0, 2000),
     }));
 
@@ -56,20 +57,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   const pkg = SCHEDULE_PACKAGES.find((p) => p.id === String(body.packageId ?? ""));
   // Fee: package fee if a valid package chosen, else per-post fee.
+  // Packages can be bought unlimited times — no active-package restriction.
   const fee = pkg ? pkg.fee : posts.length * TEXT_POST_FEE;
-
-  // One active package at a time.
-  if (pkg) {
-    const existing = await prisma.schedulePackage.findFirst({
-      where: { shop, status: "active" },
-    });
-    if (existing) {
-      return json(
-        { ok: false, error: "ALREADY_ACTIVE", message: "You already have an active package." },
-        { status: 400 },
-      );
-    }
-  }
 
   const wallet = await getWallet(shop);
   if (!isFreeShop(shop) && wallet.balance < fee) {
@@ -105,7 +94,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
   }
 
-  // Create scheduled posts (9:00 AM UTC on each date).
+  // Create scheduled posts at the chosen date+time (multiple per date allowed).
   const created = await prisma.$transaction(
     posts.map((p) =>
       prisma.scheduledPost.create({
@@ -116,7 +105,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           mediaUrls: "[]",
           mediaType: "post",
           platforms: '["facebook"]',
-          scheduledAt: new Date(`${p.date}T09:00:00Z`),
+          scheduledAt: new Date(`${p.date}T${p.time}:00Z`),
           status: "scheduled",
         },
       }),
