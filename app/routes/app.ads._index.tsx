@@ -19,6 +19,7 @@ import { NavButton } from "../components/NavButton";
 import { Anim, Hero, PromoBanner } from "../components/ui";
 import StrategyBar from "../components/StrategyBar";
 import DataDoctor from "../components/DataDoctor";
+import BudgetGuardian from "../components/BudgetGuardian";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -76,6 +77,7 @@ export default function AdsDashboard() {
           <Anim index={1}>
             <StrategyBar />
           <DataDoctor />
+          <BudgetGuardian />
           </Anim>
         )}
         {adAccounts.length === 0 ? (

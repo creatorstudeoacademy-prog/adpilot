@@ -1,0 +1,256 @@
+/* ── AdPilot 3D Design System ─────────────────────────────────────────
+   Eye-catching 3D UI: depth, glass, motion. Pure CSS, no libraries.
+   Import in app/root.tsx alongside adpilot-ui.css
+------------------------------------------------------------------- */
+
+/* 3D scene container — gives children perspective */
+.ap-3d-scene {
+  perspective: 1200px;
+}
+
+/* Tilt card: lifts and tilts on hover */
+.ap-tilt {
+  transform-style: preserve-3d;
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.35s ease;
+  will-change: transform;
+}
+.ap-tilt:hover {
+  transform: translateY(-6px) rotateX(4deg) rotateY(-4deg) scale(1.015);
+}
+
+/* Glass card: frosted depth */
+.ap-glass {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.55));
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow:
+    0 8px 32px rgba(92, 106, 196, 0.12),
+    0 2px 8px rgba(0, 0, 0, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  border-radius: 16px;
+}
+
+/* Deep shadow layers for floating elements */
+.ap-float-1 { box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08), 0 12px 32px rgba(92, 106, 196, 0.1); }
+.ap-float-2 { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1), 0 20px 48px rgba(92, 106, 196, 0.14); }
+.ap-float-3 { box-shadow: 0 12px 36px rgba(0, 0, 0, 0.12), 0 28px 64px rgba(92, 106, 196, 0.18); }
+
+/* Gradient text */
+.ap-grad-text {
+  background: linear-gradient(135deg, #5c6ac4 0%, #9c6ade 50%, #e2598b 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* Gradient border card */
+.ap-grad-border {
+  position: relative;
+  background: #fff;
+  border-radius: 16px;
+  z-index: 0;
+}
+.ap-grad-border::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #5c6ac4, #9c6ade, #e2598b, #f49342);
+  background-size: 300% 300%;
+  animation: ap-grad-shift 6s ease infinite;
+  z-index: -1;
+}
+@keyframes ap-grad-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* Floating orbs background */
+.ap-orbs {
+  position: relative;
+  overflow: hidden;
+}
+.ap-orbs::before,
+.ap-orbs::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(70px);
+  opacity: 0.45;
+  pointer-events: none;
+  z-index: 0;
+}
+.ap-orbs::before {
+  width: 340px;
+  height: 340px;
+  background: radial-gradient(circle, #9c6ade, transparent 70%);
+  top: -110px;
+  right: -80px;
+  animation: ap-orb-drift 14s ease-in-out infinite alternate;
+}
+.ap-orbs::after {
+  width: 280px;
+  height: 280px;
+  background: radial-gradient(circle, #5c6ac4, transparent 70%);
+  bottom: -100px;
+  left: -70px;
+  animation: ap-orb-drift 18s ease-in-out infinite alternate-reverse;
+}
+@keyframes ap-orb-drift {
+  from { transform: translate(0, 0) scale(1); }
+  to { transform: translate(40px, 30px) scale(1.12); }
+}
+.ap-orbs > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Hero with 3D depth */
+.ap-hero-3d {
+  background: linear-gradient(135deg, #1a1b3a 0%, #2d2a5e 45%, #4a2a6e 100%);
+  border-radius: 20px;
+  position: relative;
+  overflow: hidden;
+  box-shadow:
+    0 20px 60px rgba(26, 27, 58, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+.ap-hero-3d::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 500px 200px at 20% 0%, rgba(156, 106, 222, 0.35), transparent),
+    radial-gradient(ellipse 400px 180px at 85% 100%, rgba(92, 106, 196, 0.3), transparent);
+  pointer-events: none;
+}
+.ap-hero-3d > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* 3D button: depth + press */
+.ap-btn-3d {
+  transform: translateZ(0);
+  box-shadow:
+    0 4px 0 rgba(0, 0, 0, 0.12),
+    0 8px 20px rgba(92, 106, 196, 0.3);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.ap-btn-3d:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 6px 0 rgba(0, 0, 0, 0.12),
+    0 12px 28px rgba(92, 106, 196, 0.38);
+}
+.ap-btn-3d:active {
+  transform: translateY(3px);
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.12),
+    0 4px 12px rgba(92, 106, 196, 0.25);
+}
+
+/* Stat card with 3D pop */
+.ap-stat-3d {
+  background: linear-gradient(160deg, #ffffff 0%, #f6f6f9 100%);
+  border-radius: 16px;
+  border: 1px solid rgba(92, 106, 196, 0.12);
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.04),
+    0 12px 28px rgba(92, 106, 196, 0.08),
+    inset 0 1px 0 #ffffff;
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.3s ease;
+  transform-style: preserve-3d;
+}
+.ap-stat-3d:hover {
+  transform: translateY(-5px) rotateX(3deg);
+  box-shadow:
+    0 4px 10px rgba(0, 0, 0, 0.06),
+    0 20px 44px rgba(92, 106, 196, 0.16),
+    inset 0 1px 0 #ffffff;
+}
+
+/* Icon bubble with 3D depth */
+.ap-icon-3d {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  background: linear-gradient(145deg, #ffffff, #ececf4);
+  box-shadow:
+    5px 5px 12px rgba(0, 0, 0, 0.08),
+    -3px -3px 8px rgba(255, 255, 255, 0.9),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+.ap-icon-3d.violet { background: linear-gradient(145deg, #7c83e8, #5c6ac4); box-shadow: 5px 5px 14px rgba(92,106,196,.35), inset 0 1px 0 rgba(255,255,255,.35); }
+.ap-icon-3d.pink { background: linear-gradient(145deg, #f06a9c, #d63f7a); box-shadow: 5px 5px 14px rgba(214,63,122,.35), inset 0 1px 0 rgba(255,255,255,.35); }
+.ap-icon-3d.amber { background: linear-gradient(145deg, #f5b942, #e8930c); box-shadow: 5px 5px 14px rgba(232,147,12,.35), inset 0 1px 0 rgba(255,255,255,.35); }
+.ap-icon-3d.green { background: linear-gradient(145deg, #3ecf8e, #1fae6b); box-shadow: 5px 5px 14px rgba(31,174,107,.35), inset 0 1px 0 rgba(255,255,255,.35); }
+.ap-icon-3d.blue { background: linear-gradient(145deg, #4aa8ff, #2275e0); box-shadow: 5px 5px 14px rgba(34,117,224,.35), inset 0 1px 0 rgba(255,255,255,.35); }
+
+/* Staggered entrance */
+.ap-enter { opacity: 0; animation: ap-enter-up 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+@keyframes ap-enter-up {
+  from { opacity: 0; transform: translateY(24px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Shimmer loading */
+.ap-shimmer {
+  background: linear-gradient(90deg, #f0f0f5 25%, #e2e2ec 50%, #f0f0f5 75%);
+  background-size: 200% 100%;
+  animation: ap-shimmer 1.4s ease infinite;
+  border-radius: 8px;
+}
+@keyframes ap-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+/* Progress bar with 3D shine */
+.ap-progress-3d {
+  height: 12px;
+  border-radius: 8px;
+  background: #ececf2;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+.ap-progress-3d > div {
+  height: 100%;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #8b93f0 0%, #5c6ac4 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 2px 8px rgba(92, 106, 196, 0.4);
+  transition: width 1s cubic-bezier(0.22, 1, 0.36, 1);
+  position: relative;
+}
+.ap-progress-3d > div::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+  animation: ap-shine-sweep 2.2s ease infinite;
+}
+@keyframes ap-shine-sweep {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+
+/* Section divider with depth */
+.ap-divider-3d {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(92, 106, 196, 0.25), transparent);
+  margin: 8px 0;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .ap-tilt:hover, .ap-stat-3d:hover { transform: none; }
+  .ap-orbs::before, .ap-orbs::after { animation: none; }
+  .ap-grad-border::before { animation: none; }
+  .ap-enter { animation-duration: 0.01s; }
+}

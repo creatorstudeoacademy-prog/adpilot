@@ -144,6 +144,7 @@ export function startScheduledPostWorker(intervalMs = 60_000): void {
   g.__adpilotWorkerStarted = true;
 
   let running = false;
+  let tickCount = 0;
   const tick = async () => {
     if (running) return; // never overlap passes
     running = true;
@@ -159,6 +160,17 @@ export function startScheduledPostWorker(intervalMs = 60_000): void {
         console.log(
           `[adpilot scheduler] lifetime pass: ${lt.generated} generated, ${lt.renewed} renewed, ${lt.expired} expired`,
         );
+      }
+      // Budget Guardian: check every ~30 min (every 30th tick at 60s interval).
+      tickCount++;
+      if (tickCount % 30 === 0) {
+        const { runGuardianPass } = await import("./guardian.server");
+        const g = await runGuardianPass();
+        if (g.paused > 0 || g.alerted > 0) {
+          console.log(
+            `[adpilot scheduler] guardian: ${g.checked} checked, ${g.paused} paused, ${g.alerted} alerted`,
+          );
+        }
       }
     } catch (e) {
       console.error("[adpilot scheduler] pass error:", e);

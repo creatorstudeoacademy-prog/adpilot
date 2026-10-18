@@ -427,3 +427,47 @@ model PixelSettings {
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 }
+
+/// Budget Guardian: per-shop kill-switch rules that protect ad spend.
+model GuardianSettings {
+  id                  String   @id @default(cuid())
+  shop                String   @unique
+  enabled             Boolean  @default(true)
+  // Pause a campaign when it spends this much with zero purchases.
+  maxSpendNoPurchase Float    @default(20)
+  // Pause when ROAS drops below this AND spend exceeds minSpendForRoas.
+  minRoas             Float    @default(1.0)
+  minSpendForRoas     Float    @default(30)
+  // If true: only alert, never auto-pause.
+  notifyOnly          Boolean  @default(false)
+  currency            String   @default("USD")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+/// Log of every Guardian action (pause, alert, scale suggestion).
+model GuardianLog {
+  id          String   @id @default(cuid())
+  shop        String
+  campaignId  String
+  campaignName String  @default("")
+  action      String   // paused | alerted | scale_suggested
+  reason      String
+  spend       Float    @default(0)
+  purchases   Int      @default(0)
+  roas        Float?
+  createdAt   DateTime @default(now())
+
+  @@index([shop, createdAt])
+}
+
+/// Review prompts: track success moments so we ask at the right time.
+model ReviewPrompt {
+  id        String   @id @default(cuid())
+  shop      String
+  trigger   String   // first_campaign | first_purchase | thirty_days | winner_scaled
+  shownAt   DateTime @default(now())
+  dismissed Boolean  @default(false)
+
+  @@index([shop, trigger])
+}

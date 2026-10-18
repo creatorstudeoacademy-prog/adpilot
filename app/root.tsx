@@ -8,9 +8,11 @@ import {
 import type { LinksFunction } from "@remix-run/node";
 
 import adpilotStyles from "./styles/adpilot-ui.css?url";
+import adpilot3dStyles from "./styles/adpilot-3d.css?url";
 
 export const links: LinksFunction = () => [
   { rel: "stylesheet", href: adpilotStyles },
+  { rel: "stylesheet", href: adpilot3dStyles },
 ];
 
 export default function App() {
