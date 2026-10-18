@@ -75,6 +75,7 @@ const AUDIENCE_TYPES = [
 ] as const;
 
 import { COUNTRIES as COUNTRY_OPTIONS } from "../lib/countries";
+import { Anim, Hero } from "../components/ui";
 
 const RETENTION_OPTIONS = [
   { label: "30 days", value: "30" },
@@ -487,27 +488,41 @@ export default function AudienceManager() {
       backAction={{ content: "Ads", url: "/app/ads" }}
     >
       <BlockStack gap="500">
+        <Anim index={0}>
+          <Hero
+            title="Audience Manager"
+            subtitle="Build retargeting & prospecting audiences once, reuse everywhere"
+          />
+        </Anim>
         {actionData && !actionData.ok && (
-          <Banner title="Couldn't create the audience" tone="critical">
-            {actionData.error}
-          </Banner>
+          <Anim index={1}>
+            <Banner title="Couldn't create the audience" tone="critical">
+              {actionData.error}
+            </Banner>
+          </Anim>
         )}
         {actionData?.ok && actionData.message && (
-          <Banner title="Audience created" tone="success">
-            {actionData.message}
-          </Banner>
+          <Anim index={1}>
+            <Banner title="Audience created" tone="success">
+              {actionData.message}
+            </Banner>
+          </Anim>
         )}
 
-        <AutoCreateCard
-          adAccounts={adAccounts}
-          busy={nav.state !== "idle"}
-        />
+        <Anim index={1}>
+          <AutoCreateCard
+            adAccounts={adAccounts}
+            busy={nav.state !== "idle"}
+          />
+        </Anim>
         {showCreator && (
-          <Card>
-            <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">
-                New audience
-              </Text>
+          <Anim index={2}>
+            <div className="ap-card-hover">
+              <Card>
+                <BlockStack gap="400">
+                  <Text as="h2" variant="headingMd">
+                    New audience
+                  </Text>
               <Select
                 label="Ad account"
                 options={adAccounts.map((a) => ({
@@ -526,6 +541,7 @@ export default function AudienceManager() {
                   <Grid.Cell key={t.id} columnSpan={{ xs: 6, sm: 3, md: 2, lg: 4, xl: 4 }}>
                     <Card>
                       <div
+                        className="ap-card-hover"
                         onClick={() => setType(t.id)}
                         style={{
                           cursor: "pointer",
@@ -728,16 +744,20 @@ export default function AudienceManager() {
                 </Button>
               </InlineStack>
             </BlockStack>
-          </Card>
+              </Card>
+            </div>
+          </Anim>
         )}
 
         <Layout>
           <Layout.Section>
-            <Card>
-              <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">
-                  Your audiences
-                </Text>
+            <Anim index={3}>
+              <div className="ap-card-hover">
+                <Card>
+                  <BlockStack gap="400">
+                    <Text as="h2" variant="headingMd">
+                      Your audiences
+                    </Text>
                 {audiences.length === 0 ? (
                   <Text as="p" tone="subdued">
                     No audiences yet. Create your first audience to power
@@ -750,8 +770,10 @@ export default function AudienceManager() {
                     rows={rows}
                   />
                 )}
-              </BlockStack>
-            </Card>
+                  </BlockStack>
+                </Card>
+              </div>
+            </Anim>
           </Layout.Section>
         </Layout>
       </BlockStack>
@@ -781,12 +803,13 @@ function AutoCreateCard({
   };
 
   return (
-    <Card>
-      <BlockStack gap="300">
-        <InlineStack gap="200" blockAlign="center">
-          <Text as="h2" variant="headingMd">
-            ✨ Auto-create Audience with AI
-          </Text>
+    <div className="ap-card-hover">
+      <Card>
+        <BlockStack gap="300">
+          <InlineStack gap="200" blockAlign="center">
+            <Text as="h2" variant="headingMd">
+              ✨ Auto-create Audience with AI
+            </Text>
           <Badge tone="info">AI-Powered</Badge>
         </InlineStack>
         <Text as="p" variant="bodySm" tone="subdued">
@@ -842,7 +865,8 @@ function AutoCreateCard({
           AI will analyze your page, pick the best interests, age range, and
           demographics for your objective — then create the audience on Meta.
         </Text>
-      </BlockStack>
-    </Card>
+        </BlockStack>
+      </Card>
+    </div>
   );
 }
