@@ -19,14 +19,14 @@ function newEventId() {
 }
 
 // Stream a copy of every event to AdPilot (live feed + filters).
-function streamToAdPilot(eventName, params) {
+function streamToAdPilot(eventName, params, eventId) {
   if (!APP_URL || !SHOP) return;
   try {
     const body = {
       shop: SHOP,
       pixelId: PIXEL_ID,
       eventName: eventName,
-      eventId: newEventId(),
+      eventId: eventId || newEventId(),
       url: params.pageUrl || "",
       value: params.value,
       currency: params.currency,
@@ -41,12 +41,14 @@ function streamToAdPilot(eventName, params) {
   } catch (e) {}
 }
 
-function track(eventName, params) {
+function track(eventName, params, eventId) {
   params = params || {};
+  var eid = eventId || newEventId();
   if (typeof fbq === "function") {
-    fbq("track", eventName, params);
+    // eventID lets Meta dedupe against the server (CAPI) event with the same ID.
+    fbq("track", eventName, params, { eventID: eid });
   }
-  streamToAdPilot(eventName, params);
+  streamToAdPilot(eventName, params, eid);
 }
 
 if (PIXEL_ID && /^\d+$/.test(PIXEL_ID)) {
@@ -114,9 +116,16 @@ if (PIXEL_ID && /^\d+$/.test(PIXEL_ID)) {
     });
   });
   analytics.subscribe("checkout_completed", function (event) {
-    track("Purchase", {
-      value: event.data?.checkout?.totalPrice?.amount,
-      currency: event.data?.checkout?.totalPrice?.currencyCode,
-    });
+    var orderId = event.data?.checkout?.order?.id;
+    // Shared event_id with the server (CAPI) Purchase — Meta counts it once.
+    var eid = orderId ? "shopify_" + String(orderId).split("/").pop() : undefined;
+    track(
+      "Purchase",
+      {
+        value: event.data?.checkout?.totalPrice?.amount,
+        currency: event.data?.checkout?.totalPrice?.currencyCode,
+      },
+      eid,
+    );
   });
 }
