@@ -107,9 +107,17 @@ export default function StrategyBar() {
     }
   };
 
-  const applyUrl = strategy?.bestAudience
-    ? `/app/ads/create?ageMin=${strategy.bestAudience.ageMin ?? 18}&ageMax=${strategy.bestAudience.ageMax ?? 65}&country=${(strategy.bestAudience.countries ?? ["US"])[0]}&budget=${strategy.budget?.recommendedDaily ?? 10}`
-    : "/app/ads/create";
+  const audience = strategy?.bestAudience;
+  const applyParams = audience
+    ? `ageMin=${audience.ageMin ?? 18}&ageMax=${audience.ageMax ?? 65}&country=${(audience.countries ?? ["US"])[0]}&budget=${strategy.budget?.recommendedDaily ?? 10}`
+    : "";
+  const applyUrl = `/app/ads/create${applyParams ? `?${applyParams}` : ""}`;
+  // Funnel splits the total daily budget 50/30/20 across 3 stages — scale it up 3x.
+  const funnelBudget = (strategy?.budget?.recommendedDaily ?? 10) * 3;
+  const funnelParams = audience
+    ? `ageMin=${audience.ageMin ?? 25}&ageMax=${audience.ageMax ?? 64}&country=${(audience.countries ?? ["US"])[0]}&budget=${funnelBudget}`
+    : "";
+  const funnelUrl = `/app/ads/funnel${funnelParams ? `?${funnelParams}` : ""}`;
 
   return (
     <Card>
@@ -147,9 +155,14 @@ export default function StrategyBar() {
                 </Text>
               </BlockStack>
               <div style={{ marginLeft: "auto" }}>
-                <Button url={applyUrl} variant="primary">
-                  ✨ Apply to new campaign
-                </Button>
+                <InlineStack gap="200">
+                  <Button url={applyUrl} variant="primary">
+                    ✨ Apply to campaign
+                  </Button>
+                  <Button url={funnelUrl}>
+                    🚀 Apply to funnel
+                  </Button>
+                </InlineStack>
               </div>
             </InlineStack>
 

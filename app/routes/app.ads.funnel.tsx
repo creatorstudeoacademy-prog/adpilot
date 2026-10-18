@@ -4,6 +4,7 @@ import {
   useActionData,
   useLoaderData,
   useNavigation,
+  useSearchParams,
   useSubmit,
 } from "@remix-run/react";
 import {
@@ -426,12 +427,13 @@ export default function FullFunnel() {
   const [adAccountDbId, setAdAccountDbId] = useState(adAccounts[0]?.id ?? "");
   const acctCurrency = adAccounts.find((a) => a.id === adAccountDbId)?.currency ?? "USD";
   const acctSymbol = currencySymbol(acctCurrency);
+  const [searchParams] = useSearchParams();
   const [name, setName] = useState("");
   const [productUrl, setProductUrl] = useState("");
-  const [totalBudget, setTotalBudget] = useState("30");
-  const [country, setCountry] = useState("US");
-  const [ageMin, setAgeMin] = useState("25");
-  const [ageMax, setAgeMax] = useState("64");
+  const [totalBudget, setTotalBudget] = useState(searchParams.get("budget") ?? "30");
+  const [country, setCountry] = useState(searchParams.get("country") ?? "US");
+  const [ageMin, setAgeMin] = useState(searchParams.get("ageMin") ?? "25");
+  const [ageMax, setAgeMax] = useState(searchParams.get("ageMax") ?? "64");
   const [headline, setHeadline] = useState("");
   const [primaryText, setPrimaryText] = useState("");
   const [description, setDescription] = useState("");

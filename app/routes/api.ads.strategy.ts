@@ -136,6 +136,76 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const clicks = parseInt(t.clicks ?? "0", 10) || 0;
   const { purchases } = sumPurchases(t);
 
+  /* ---- Deep research: the merchant's TOTAL business picture ---- */
+  const biz: {
+    page?: { name?: string; followers?: number; fans?: number };
+    catalog?: { name?: string; productCount?: number; priceRange?: string; sample?: string[] };
+    pixels?: Array<{ id: string; name?: string; lastFired?: string | null }>;
+  } = {};
+
+  // Facebook Page (social proof + organic audience signal).
+  const fbPage = await prisma.socialAccount.findFirst({ where: { shop, platform: "facebook" } });
+  if (fbPage?.pageId) {
+    try {
+      const pr = await fetch(
+        `https://graph.facebook.com/${GRAPH_VERSION}/${fbPage.pageId}?fields=name,followers_count,fan_count&access_token=${token}`,
+      );
+      const pd = (await pr.json()) as { name?: string; followers_count?: number; fan_count?: number };
+      if (!pd.error) {
+        biz.page = { name: pd.name, followers: pd.followers_count, fans: pd.fan_count };
+      }
+    } catch {
+      // page data is a bonus signal; skip on failure
+    }
+  }
+
+  // Product catalog (what they sell, price points).
+  const activeCatalog = await prisma.productCatalog.findFirst({ where: { shop, isActive: true } });
+  if (activeCatalog) {
+    try {
+      const { listCatalogProducts } = await import("../lib/meta-ads.server");
+      const products = await listCatalogProducts(activeCatalog.catalogId, token);
+      const prices = products
+        .map((pr) => parseFloat(String(pr.price ?? "").replace(/[^0-9.]/g, "")) || 0)
+        .filter((n) => n > 0);
+      biz.catalog = {
+        name: activeCatalog.name,
+        productCount: products.length,
+        priceRange:
+          prices.length > 0
+            ? `${Math.min(...prices).toFixed(2)} – ${Math.max(...prices).toFixed(2)}`
+            : "n/a",
+        sample: products.slice(0, 8).map((pr) => `${pr.name ?? "?"} (${pr.price ?? "n/a"})`),
+      };
+    } catch {
+      // catalog read may need approval; skip on failure
+    }
+  }
+
+  // Pixels (tracking health = data quality signal).
+  const savedPixels = await prisma.adAccount.findMany({
+    where: { shop, pixelId: { not: null } },
+    select: { pixelId: true },
+  });
+  const pixelIds = [...new Set(savedPixels.map((a) => a.pixelId).filter(Boolean) as string[])];
+  if (pixelIds.length > 0) {
+    try {
+      const { getPixelInfo } = await import("../lib/meta-ads.server");
+      biz.pixels = await Promise.all(
+        pixelIds.slice(0, 3).map(async (pid) => {
+          try {
+            const info = await getPixelInfo(pid, token);
+            return { id: pid, name: info.name, lastFired: info.last_fired_time ?? null };
+          } catch {
+            return { id: pid, lastFired: null };
+          }
+        }),
+      );
+    } catch {
+      // skip on failure
+    }
+  }
+
   const fmtRows = (rows: InsightsRow[], keys: string[]) =>
     rows
       .map((r) => {
@@ -145,13 +215,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       })
       .join("\n");
 
-  const systemPrompt = `You are an elite Meta ads strategist for small e-commerce brands. Given 30 days of real ad account performance, produce a concrete, budget-protecting sales strategy.
+  const systemPrompt = `You are a senior Meta ads media buyer with 10 years of experience scaling e-commerce brands. You have been handed the merchant's TOTAL business picture — not just ad numbers, but their Facebook Page (social proof), their product catalog (what they sell and at what price), their pixel health (tracking quality), and 30 days of ad performance.
+
+Do a deep expert analysis like you would for a paying client:
+- Connect the dots: does their catalog price point match the audience? Does their Page following give them social proof to leverage? Is their pixel healthy enough to optimize for purchases, or should they optimize for clicks first?
+- If the pixel never fired, be blunt: they cannot run purchase-optimized ads yet — say exactly what to fix first.
+- If data is thin (low spend, no purchases), give a safe testing plan instead of pretending.
 
 Rules:
-- Base EVERY recommendation on the actual numbers. If data is thin (low spend, no purchases), say so and give a safe testing plan instead of pretending.
+- Base EVERY recommendation on the actual data below. Reference specific numbers.
 - Be specific: exact age range, countries, placements, daily budget numbers in the account currency.
 - Placements: recommend "advantage" (Advantage+ placements, Meta's automatic) unless the data clearly shows a manual placement wins. Never recommend more than 3 manual placements.
-- Budget: never recommend more than the merchant has proven. Start small, scale winners.
+- Budget: never recommend more than the merchant has proven. Start small, scale winners. Tie the budget to the catalog price point (e.g. don't suggest $50/day to sell a $5 item with no data).
+- Creative: tailor advice to their actual products (use product names from the catalog).
 - The merchant's goal is sales without wasted budget. Protect their money like it's your own.
 - Respond with ONLY a single JSON object, no markdown fences, no extra text. Use this exact shape:
 {
@@ -179,13 +255,33 @@ Rules:
   ]
 }`;
 
+  const bizLines: string[] = [];
+  if (biz.page) {
+    bizLines.push(
+      `Facebook Page: ${biz.page.name ?? "?"} — ${biz.page.followers?.toLocaleString() ?? "?"} followers, ${biz.page.fans?.toLocaleString() ?? "?"} fans`,
+    );
+  }
+  if (biz.catalog) {
+    bizLines.push(
+      `Product catalog "${biz.catalog.name ?? "?"}": ${biz.catalog.productCount ?? 0} products, price range ${biz.catalog.priceRange ?? "n/a"}`,
+    );
+    if (biz.catalog.sample?.length) {
+      bizLines.push(`Sample products: ${biz.catalog.sample.join(" | ")}`);
+    }
+  }
+  if (biz.pixels?.length) {
+    bizLines.push(
+      `Pixels: ${biz.pixels.map((px) => `${px.name ?? px.id} (last event: ${px.lastFired ?? "NEVER"})`).join(" | ")}`,
+    );
+  }
   const userPrompt =
     `Ad account: ${adAccount.adAccountName} (${adAccount.adAccountId}), currency ${adAccount.currency ?? "USD"}\n` +
     `Last 30 days totals: spend ${spend.toFixed(2)}, impressions ${impressions}, clicks ${clicks}, purchases ${purchases}\n` +
     `\nBy age/gender:\n${fmtRows(byAgeGender, ["age", "gender"]) || "(no data)"}\n` +
     `\nBy country:\n${fmtRows(byCountry, ["country"]) || "(no data)"}\n` +
     `\nBy platform:\n${fmtRows(byPlatform, ["publisher_platform"]) || "(no data)"}\n` +
-    `\nBuild the sales strategy. What exact setup (age, location, placements, budget, creative) should this merchant use so they don't waste money?`;
+    (bizLines.length > 0 ? `\nTOTAL BUSINESS PICTURE:\n${bizLines.join("\n")}\n` : "") +
+    `\nAs a senior media buyer, analyze this merchant's whole business and build the sales strategy. What exact setup (age, location, placements, budget, creative) should they use so they don't waste money? What should they fix first?`;
 
   try {
     const { generateForSector, getAgentsForSector, getMainAgent } = await import(
