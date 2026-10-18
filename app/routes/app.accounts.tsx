@@ -19,6 +19,7 @@ import {
   InlineStack,
   Layout,
   Page,
+  Select,
   Text,
   TextField,
 } from "@shopify/polaris";
