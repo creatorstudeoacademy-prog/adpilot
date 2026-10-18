@@ -18,18 +18,38 @@ interface Strategy {
   recommendations?: Array<{ title?: string; detail?: string; priority?: string }>;
 }
 
-function parseStrategy(raw: string): Strategy | null {
+function tryParse(t: string): Strategy | null {
   try {
-    let t = raw.trim();
-    const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (fence) t = fence[1].trim();
-    const start = t.indexOf("{");
-    const end = t.lastIndexOf("}");
-    if (start >= 0 && end > start) t = t.slice(start, end + 1);
-    return JSON.parse(t) as Strategy;
+    const parsed = JSON.parse(t) as Strategy;
+    return typeof parsed === "object" && parsed !== null ? parsed : null;
   } catch {
     return null;
   }
+}
+
+function parseStrategy(raw: string): Strategy | null {
+  const t = raw.trim();
+  // 1. Fenced block (complete).
+  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fence) {
+    const p = tryParse(fence[1].trim());
+    if (p) return p;
+  }
+  // 2. Whole text as JSON.
+  const start = t.indexOf("{");
+  if (start >= 0) {
+    const p = tryParse(t.slice(start).trim());
+    if (p) return p;
+    // 3. Truncated JSON: cut at the last complete top-level field.
+    //    Find the last "}," that closes a complete key, then close the object.
+    const sliced = t.slice(start);
+    const lastFieldEnd = sliced.lastIndexOf("},");
+    if (lastFieldEnd > 0) {
+      const p2 = tryParse(sliced.slice(0, lastFieldEnd + 1) + "}");
+      if (p2) return p2;
+    }
+  }
+  return null;
 }
 
 function ScoreRing({ score }: { score: number }) {

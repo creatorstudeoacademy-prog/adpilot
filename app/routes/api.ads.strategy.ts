@@ -229,6 +229,7 @@ Rules:
 - Budget: never recommend more than the merchant has proven. Start small, scale winners. Tie the budget to the catalog price point (e.g. don't suggest $50/day to sell a $5 item with no data).
 - Creative: tailor advice to their actual products (use product names from the catalog).
 - The merchant's goal is sales without wasted budget. Protect their money like it's your own.
+- CRITICAL: keep the whole response SHORT. verdict: 1 sentence. reason/note/detail: 1 sentence each. creativeGuidance: max 3 items, 1 sentence each. risks: max 3 items, 1 sentence each. recommendations: max 3 items. Never exceed ~350 words total — the response must fit completely, never cut off mid-sentence.
 - Respond with ONLY a single JSON object, no markdown fences, no extra text. Use this exact shape:
 {
   "score": <0-100: how ready/healthy the ad data is for scaling>,
