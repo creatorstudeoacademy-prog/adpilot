@@ -90,18 +90,28 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   );
 
   // Map ad account -> Business Manager name (best-effort, one API call).
+  // Checks both owned AND client ad accounts — agency/client accounts are
+  // usually linked as clients, not owned, so owned_ad_accounts alone misses them.
   const businessByAdAccount = new Map<string, string>();
   if (userToken?.accessToken) {
     try {
       const { decryptToken } = await import("../lib/token-vault.server");
       const bRes = await fetch(
-        `https://graph.facebook.com/${GRAPH_VERSION}/me/businesses?fields=id,name,owned_ad_accounts{id}&access_token=${decryptToken(userToken.accessToken)}`,
+        `https://graph.facebook.com/${GRAPH_VERSION}/me/businesses?fields=id,name,owned_ad_accounts{id},client_ad_accounts{id}&access_token=${decryptToken(userToken.accessToken)}`,
       );
       const bData = (await bRes.json()) as {
-        data?: Array<{ name?: string; owned_ad_accounts?: { data?: Array<{ id?: string }> } }>;
+        data?: Array<{
+          name?: string;
+          owned_ad_accounts?: { data?: Array<{ id?: string }> };
+          client_ad_accounts?: { data?: Array<{ id?: string }> };
+        }>;
       };
       for (const b of bData?.data ?? []) {
-        for (const aa of b?.owned_ad_accounts?.data ?? []) {
+        const edges = [
+          ...(b?.owned_ad_accounts?.data ?? []),
+          ...(b?.client_ad_accounts?.data ?? []),
+        ];
+        for (const aa of edges) {
           if (aa?.id) businessByAdAccount.set(String(aa.id).replace("act_", ""), b.name ?? "");
         }
       }
@@ -356,14 +366,23 @@ function PixelCard({
         method: "POST",
         body: data,
       });
-      const json = await res.json();
+      const text = await res.text();
+      let json: { ok?: boolean; pixels?: Array<{ id: string; name: string }>; message?: string } = {};
+      try {
+        json = JSON.parse(text);
+      } catch {
+        throw new Error(`Server returned an error (HTTP ${res.status}). Please reload and try again.`);
+      }
       if (json.ok) {
-        setPixels(json.pixels);
+        setPixels(json.pixels ?? []);
+        if (!json.pixels || json.pixels.length === 0) {
+          setFetchError("No pixels found on this ad account — check it has a pixel assigned in Business Manager, or enter the Pixel ID manually.");
+        }
       } else {
         setFetchError(json.message ?? "Failed to fetch pixels.");
       }
-    } catch {
-      setFetchError("Failed to fetch pixels.");
+    } catch (e) {
+      setFetchError(e instanceof Error ? e.message : "Failed to fetch pixels.");
     } finally {
       setFetching(false);
     }
