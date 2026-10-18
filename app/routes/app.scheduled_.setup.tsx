@@ -401,6 +401,44 @@ export default function ScheduleSetup() {
                     Auto-generate {pkg?.posts ?? ""} posts
                   </Button>
                 </InlineStack>
+
+                {/* Sample preview — what generated posts look like */}
+                <Box
+                  background="bg-surface-secondary"
+                  borderRadius="200"
+                  padding="400"
+                >
+                  <BlockStack gap="200">
+                    <Text as="p" variant="bodyMd" fontWeight="semibold">
+                      👁️ Preview — your posts will look like this:
+                    </Text>
+                    <Box
+                      background="bg-surface"
+                      borderRadius="200"
+                      padding="300"
+                    >
+                      <BlockStack gap="100">
+                        <Text as="p" variant="bodyMd">
+                          Winter is here, and we've got you covered! ❄️ Our new
+                          cozy collection just dropped — soft fabrics, warm
+                          colors, and styles you'll love all season long. Come
+                          see what's new!
+                        </Text>
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          #WinterFashion #NewArrivals #CozyStyle #ShopNow
+                        </Text>
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          📅 Day 1 · 09:00 AM · Facebook Page
+                        </Text>
+                      </BlockStack>
+                    </Box>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Each post is 3–5 sentences with hashtags, scheduled
+                      day-wise at your chosen time. You can edit every post
+                      before approving.
+                    </Text>
+                  </BlockStack>
+                </Box>
               </BlockStack>
             </Box>
           </Card>
