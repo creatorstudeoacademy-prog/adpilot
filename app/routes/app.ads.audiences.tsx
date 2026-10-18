@@ -4,6 +4,7 @@ import {
   useActionData,
   useLoaderData,
   useNavigation,
+  useSearchParams,
   useSubmit,
 } from "@remix-run/react";
 import {
@@ -454,7 +455,8 @@ export default function AudienceManager() {
   const nav = useNavigation();
   const busy = nav.state === "submitting";
 
-  const [showCreator, setShowCreator] = useState(false);
+  const [searchParams] = useSearchParams();
+  const [showCreator, setShowCreator] = useState(searchParams.has("ageMin"));
   const [adAccountDbId, setAdAccountDbId] = useState(adAccounts[0]?.id ?? "");
   const [type, setType] = useState<string>("website");
   const [name, setName] = useState("");
@@ -462,9 +464,9 @@ export default function AudienceManager() {
   const [retentionDays, setRetentionDays] = useState("180");
   const [urlContains, setUrlContains] = useState("");
   const [watchPercent, setWatchPercent] = useState("50");
-  const [country, setCountry] = useState("US");
-  const [ageMin, setAgeMin] = useState("25");
-  const [ageMax, setAgeMax] = useState("64");
+  const [country, setCountry] = useState(searchParams.get("country") ?? "US");
+  const [ageMin, setAgeMin] = useState(searchParams.get("ageMin") ?? "25");
+  const [ageMax, setAgeMax] = useState(searchParams.get("ageMax") ?? "64");
   const [interestKeywords, setInterestKeywords] = useState("");
   const [sourceAudienceDbId, setSourceAudienceDbId] = useState("");
 

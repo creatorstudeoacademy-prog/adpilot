@@ -118,6 +118,8 @@ export default function StrategyBar() {
     ? `ageMin=${audience.ageMin ?? 25}&ageMax=${audience.ageMax ?? 64}&country=${(audience.countries ?? ["US"])[0]}&budget=${funnelBudget}`
     : "";
   const funnelUrl = `/app/ads/funnel${funnelParams ? `?${funnelParams}` : ""}`;
+  // Audience Manager reads the same params and auto-opens the creator.
+  const audienceUrl = `/app/ads/audiences${applyParams ? `?${applyParams}` : ""}`;
 
   return (
     <Card>
@@ -161,6 +163,9 @@ export default function StrategyBar() {
                   </Button>
                   <Button url={funnelUrl}>
                     🚀 Apply to funnel
+                  </Button>
+                  <Button url={audienceUrl}>
+                    🎯 Apply to audience
                   </Button>
                 </InlineStack>
               </div>
