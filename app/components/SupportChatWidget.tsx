@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Box, Button, Icon, Text, TextField } from "@shopify/polaris";
-import { ChatIcon, XIcon } from "@shopify/polaris-icons";
+import { XIcon } from "@shopify/polaris-icons";
+import { AdPilotIcon } from "./AdPilotIcon";
 
 interface Msg {
   role: "user" | "assistant";
@@ -103,20 +104,7 @@ export function SupportChatWidget() {
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <div
-                style={{
-                  width: "32px",
-                  height: "32px",
-                  borderRadius: "50%",
-                  background: "rgba(255,255,255,0.2)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "#fff",
-                }}
-              >
-                <Icon source={ChatIcon as never} tone="base" />
-              </div>
+              <AdPilotIcon size={36} />
               <div>
                 <Text as="p" variant="bodyMd" fontWeight="semibold">
                   <span style={{ color: "#fff" }}>AdPilot Support</span>
@@ -272,8 +260,10 @@ export function SupportChatWidget() {
           right: "24px",
           width: "56px",
           height: "56px",
-          borderRadius: "50%",
-          background: "linear-gradient(135deg, #5c6ac4 0%, #3f4a9e 100%)",
+          borderRadius: open ? "50%" : "16px",
+          background: open
+            ? "linear-gradient(135deg, #5c6ac4 0%, #3f4a9e 100%)"
+            : "transparent",
           border: "none",
           boxShadow: "0 6px 20px rgba(92,106,196,0.45)",
           cursor: "pointer",
@@ -283,11 +273,17 @@ export function SupportChatWidget() {
           color: "#fff",
           zIndex: 9999,
           transition: "transform 0.15s ease",
+          padding: 0,
+          overflow: "hidden",
         }}
         onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.06)")}
         onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
       >
-        <Icon source={(open ? XIcon : ChatIcon) as never} tone="base" />
+        {open ? (
+          <Icon source={XIcon as never} tone="base" />
+        ) : (
+          <AdPilotIcon size={56} />
+        )}
         {hasUnread && !open && (
           <span
             style={{
