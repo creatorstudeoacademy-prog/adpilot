@@ -23,7 +23,6 @@ import { Anim, Hero } from "../components/ui";
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
   const reviews = await prisma.review.findMany({
-    where: { approved: true },
     orderBy: { createdAt: "desc" },
     take: 50,
   });
@@ -49,7 +48,8 @@ function Stars({ rating }: { rating: number }) {
 }
 
 export default function ReviewsPage() {
-  const { reviews } = useLoaderData<typeof loader>();
+  const { reviews: initialReviews } = useLoaderData<typeof loader>();
+  const [reviews, setReviews] = useState(initialReviews);
   const [author, setAuthor] = useState("");
   const [rating, setRating] = useState("5");
   const [title, setTitle] = useState("");
@@ -69,6 +69,18 @@ export default function ReviewsPage() {
       const data = await res.json();
       if (data.ok) {
         setMsg({ ok: true, text: data.message });
+        // Show live immediately.
+        setReviews((prev) => [
+          {
+            id: `new-${Date.now()}`,
+            author,
+            rating: Number(rating),
+            title,
+            content,
+            createdAt: new Date().toISOString(),
+          },
+          ...prev,
+        ]);
         setAuthor("");
         setTitle("");
         setContent("");

@@ -12,7 +12,6 @@ import prisma from "../db.server";
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
   const reviews = await prisma.review.findMany({
-    where: { approved: true },
     orderBy: { createdAt: "desc" },
     take: 50,
   });
@@ -48,7 +47,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   await prisma.review.create({
-    data: { shop, author, rating, title, content, approved: false },
+    data: { shop, author, rating, title, content, approved: true },
   });
-  return json({ ok: true, message: "Thanks! Your review will appear after approval." });
+  return json({ ok: true, message: "Thanks! Your review is now live." });
 };
