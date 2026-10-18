@@ -899,6 +899,11 @@ export default function AdminControlPanel() {
   const actionData = useActionData<{ agentError?: string; providerError?: string }>();
   const [seedBusy, setSeedBusy] = useState(false);
   const [seedMsg, setSeedMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [newCode, setNewCode] = useState("");
+  const [newBonus, setNewBonus] = useState("10");
+  const [newDays, setNewDays] = useState("30");
+  const [genBusy, setGenBusy] = useState(false);
+  const [genMsg, setGenMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const seedCoupons = async () => {
     setSeedBusy(true);
@@ -915,6 +920,36 @@ export default function AdminControlPanel() {
       setSeedMsg({ ok: false, text: "Couldn't reach the server." });
     } finally {
       setSeedBusy(false);
+    }
+  };
+
+  const generateCoupon = async () => {
+    setGenBusy(true);
+    setGenMsg(null);
+    try {
+      const res = await fetch("/api/admin/create-coupon", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: newCode,
+          bonusPercent: Number(newBonus),
+          daysValid: Number(newDays),
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setGenMsg({
+          ok: true,
+          text: `✓ Coupon ${data.coupon.code} created — ${data.coupon.bonusPercent}% bonus, expires ${new Date(data.coupon.expiresAt).toLocaleDateString()}.`,
+        });
+        setNewCode("");
+      } else {
+        setGenMsg({ ok: false, text: data.error || "Couldn't create coupon." });
+      }
+    } catch {
+      setGenMsg({ ok: false, text: "Couldn't reach the server." });
+    } finally {
+      setGenBusy(false);
     }
   };
   return (
@@ -978,6 +1013,56 @@ export default function AdminControlPanel() {
                 {seedMsg && (
                   <Banner tone={seedMsg.ok ? "success" : "critical"}>
                     {seedMsg.text}
+                  </Banner>
+                )}
+
+                <Text as="h3" variant="headingSm">
+                  Generate new coupon
+                </Text>
+                <Grid columns={{ xs: 1, md: 3 }}>
+                  <Grid.Cell>
+                    <TextField
+                      label="Code"
+                      value={newCode}
+                      onChange={(v) => setNewCode(v.toUpperCase())}
+                      placeholder="e.g. FIRST50"
+                      autoComplete="off"
+                      helpText="A-Z and 0-9 only, min 4 chars"
+                    />
+                  </Grid.Cell>
+                  <Grid.Cell>
+                    <TextField
+                      label="Bonus %"
+                      type="number"
+                      value={newBonus}
+                      onChange={setNewBonus}
+                      autoComplete="off"
+                      suffix="%"
+                    />
+                  </Grid.Cell>
+                  <Grid.Cell>
+                    <TextField
+                      label="Valid for (days)"
+                      type="number"
+                      value={newDays}
+                      onChange={setNewDays}
+                      autoComplete="off"
+                      suffix="days"
+                    />
+                  </Grid.Cell>
+                </Grid>
+                <InlineStack>
+                  <Button
+                    variant="primary"
+                    loading={genBusy}
+                    onClick={() => void generateCoupon()}
+                  >
+                    🎟️ Generate coupon
+                  </Button>
+                </InlineStack>
+                {genMsg && (
+                  <Banner tone={genMsg.ok ? "success" : "critical"}>
+                    {genMsg.text}
                   </Banner>
                 )}
                 <DataTable

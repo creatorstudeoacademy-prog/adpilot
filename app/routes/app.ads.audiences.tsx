@@ -10,6 +10,7 @@ import {
   Badge,
   Banner,
   BlockStack,
+  Box,
   Button,
   Card,
   DataTable,
@@ -805,17 +806,32 @@ function AutoCreateCard({
   return (
     <div className="ap-card-hover">
       <Card>
-        <BlockStack gap="300">
+        <Box padding="500">
+        <BlockStack gap="400">
           <InlineStack gap="200" blockAlign="center">
-            <Text as="h2" variant="headingMd">
-              ✨ Auto-create Audience with AI
-            </Text>
-          <Badge tone="info">AI-Powered</Badge>
-        </InlineStack>
-        <Text as="p" variant="bodySm" tone="subdued">
-          AI analyzes your Facebook Page and campaign objective, then automatically
-          creates a high-performing interest audience. No manual targeting needed.
-        </Text>
+            <div
+              style={{
+                width: "40px",
+                height: "40px",
+                borderRadius: "12px",
+                background: "linear-gradient(135deg, #5c6ac4, #8b5cf6)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "20px",
+              }}
+            >
+              🎯
+            </div>
+            <BlockStack gap="050">
+              <Text as="h2" variant="headingLg">
+                Auto-create Audience
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                Smart targeting in one click — no manual setup needed
+              </Text>
+            </BlockStack>
+          </InlineStack>
         <Grid columns={{ xs: 1, md: 3 }}>
           <Grid.Cell>
             <Select
@@ -846,26 +862,28 @@ function AutoCreateCard({
               label="Audience name (optional)"
               value={name}
               onChange={setName}
-              placeholder="AI will generate if empty"
+              placeholder="Auto-generated if empty"
               autoComplete="off"
             />
           </Grid.Cell>
         </Grid>
-        <InlineStack gap="200">
+        <InlineStack gap="200" blockAlign="center">
           <Button
             variant="primary"
+            size="large"
             disabled={busy || !adAccountDbId}
             loading={busy}
             onClick={autoCreate}
           >
-            ✨ Generate & Create Audience ($1.20)
+            ✨ Generate & Create ($1.20)
           </Button>
+          <Text as="p" variant="bodySm" tone="subdued">
+            Analyzes your Page, picks the best interests, age & demographics —
+            then creates it on Meta.
+          </Text>
         </InlineStack>
-        <Text as="p" variant="bodySm" tone="subdued">
-          AI will analyze your page, pick the best interests, age range, and
-          demographics for your objective — then create the audience on Meta.
-        </Text>
         </BlockStack>
+        </Box>
       </Card>
     </div>
   );
