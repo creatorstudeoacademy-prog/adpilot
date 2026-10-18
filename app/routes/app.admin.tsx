@@ -221,6 +221,7 @@ async function listCoupons() {
     return all.map((c) => ({
       code: c.code,
       bonusPercent: c.bonusPercent,
+      fixedBonus: c.fixedBonus,
       expiresAt: c.expiresAt.toISOString(),
       active: c.active,
       uses: c._count.redemptions,
@@ -929,6 +930,7 @@ export default function AdminControlPanel() {
   const [seedMsg, setSeedMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [newCode, setNewCode] = useState("");
   const [newBonus, setNewBonus] = useState("10");
+  const [newFixed, setNewFixed] = useState("");
   const [newDays, setNewDays] = useState("30");
   const [genBusy, setGenBusy] = useState(false);
   const [genMsg, setGenMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -1021,6 +1023,7 @@ export default function AdminControlPanel() {
         body: JSON.stringify({
           code: newCode,
           bonusPercent: Number(newBonus),
+          fixedBonus: newFixed ? Number(newFixed) : undefined,
           daysValid: Number(newDays),
         }),
       });
@@ -1028,7 +1031,7 @@ export default function AdminControlPanel() {
       if (data.ok) {
         setGenMsg({
           ok: true,
-          text: `✓ Coupon ${data.coupon.code} created — ${data.coupon.bonusPercent}% bonus, expires ${new Date(data.coupon.expiresAt).toLocaleDateString()}.`,
+          text: `✓ Coupon ${data.coupon.code} created — ${data.coupon.fixedBonus != null ? `$${data.coupon.fixedBonus} fixed bonus` : `${data.coupon.bonusPercent}% bonus`}, expires ${new Date(data.coupon.expiresAt).toLocaleDateString()}.`,
         });
         setNewCode("");
       } else {
@@ -1157,7 +1160,19 @@ export default function AdminControlPanel() {
                       placeholder="10"
                     />
                   </Grid.Cell>
-                  <Grid.Cell columnSpan={{ xs: 3, sm: 3, md: 4, lg: 4, xl: 4 }}>
+                  <Grid.Cell columnSpan={{ xs: 3, sm: 3, md: 3, lg: 3, xl: 3 }}>
+                    <TextField
+                      label="Fixed $ bonus"
+                      type="number"
+                      value={newFixed}
+                      onChange={setNewFixed}
+                      autoComplete="off"
+                      prefix="$"
+                      placeholder="e.g. 1"
+                      helpText="Optional — overrides %"
+                    />
+                  </Grid.Cell>
+                  <Grid.Cell columnSpan={{ xs: 3, sm: 3, md: 3, lg: 3, xl: 3 }}>
                     <TextField
                       label="Valid for (days)"
                       type="number"
@@ -1188,7 +1203,7 @@ export default function AdminControlPanel() {
                   headings={["Code", "Bonus", "Expires", "Status", "Uses"]}
                   rows={coupons.map((c) => [
                     c.code,
-                    `${c.bonusPercent}%`,
+                    c.fixedBonus != null ? `$${c.fixedBonus} fixed` : `${c.bonusPercent}%`,
                     new Date(c.expiresAt).toLocaleDateString(),
                     c.active ? "Active" : "Disabled",
                     String(c.uses),

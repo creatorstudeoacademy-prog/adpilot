@@ -336,6 +336,7 @@ model Coupon {
   id             String   @id @default(cuid())
   code           String   @unique
   bonusPercent   Float    // e.g. 10 = 10% extra credit
+  fixedBonus     Float?   // if set: flat USD bonus instead of percent
   expiresAt      DateTime
   active         Boolean  @default(true)
   createdAt      DateTime @default(now())

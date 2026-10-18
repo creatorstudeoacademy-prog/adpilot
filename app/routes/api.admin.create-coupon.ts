@@ -8,8 +8,8 @@ const ADMIN_SHOP = process.env.ADMIN_SHOP_DOMAIN ?? "";
 
 /**
  * POST /api/admin/create-coupon — admin only.
- * Body: { code, bonusPercent, daysValid }
- * Creates a custom coupon code.
+ * Body: { code, bonusPercent, fixedBonus, daysValid }
+ * Creates a custom coupon code. fixedBonus (USD) overrides bonusPercent when set.
  */
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -17,7 +17,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return json({ ok: false, error: "Admin only." }, { status: 403 });
   }
 
-  let body: { code?: unknown; bonusPercent?: unknown; daysValid?: unknown } = {};
+  let body: { code?: unknown; bonusPercent?: unknown; fixedBonus?: unknown; daysValid?: unknown } = {};
   try {
     body = await request.json();
   } catch {
@@ -26,6 +26,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   const code = String(body.code ?? "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
   const bonusPercent = Math.max(1, Math.min(100, Math.floor(Number(body.bonusPercent) || 10)));
+  const fixedRaw = Number(body.fixedBonus);
+  const fixedBonus = fixedRaw > 0 ? Math.min(1000, Math.round(fixedRaw * 100) / 100) : null;
   const daysValid = Math.max(1, Math.min(365, Math.floor(Number(body.daysValid) || 30)));
 
   if (!code || code.length < 4) {
@@ -41,6 +43,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     data: {
       code,
       bonusPercent,
+      fixedBonus,
       expiresAt: new Date(Date.now() + daysValid * 24 * 60 * 60 * 1000),
       active: true,
     },
@@ -51,6 +54,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     coupon: {
       code: coupon.code,
       bonusPercent: coupon.bonusPercent,
+      fixedBonus: coupon.fixedBonus,
       expiresAt: coupon.expiresAt.toISOString(),
     },
   });

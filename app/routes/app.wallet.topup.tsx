@@ -64,7 +64,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
               await prisma.couponRedemption.create({
                 data: { couponId: coupon.id, shop },
               });
-              couponBonus = Math.round(((pack.price * coupon.bonusPercent) / 100) * 100) / 100;
+              couponBonus =
+                coupon.fixedBonus != null
+                  ? coupon.fixedBonus
+                  : Math.round(((pack.price * coupon.bonusPercent) / 100) * 100) / 100;
               couponId = coupon.id;
               // Mark the sent coupon as used.
               await prisma.shopCoupon.updateMany({

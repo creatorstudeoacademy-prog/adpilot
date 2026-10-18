@@ -45,6 +45,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   return json({
     ok: true,
     bonusPercent: coupon.bonusPercent,
+    fixedBonus: coupon.fixedBonus,
     expiresAt: coupon.expiresAt.toISOString(),
   });
 };
